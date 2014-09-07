@@ -1,8 +1,10 @@
 package main
+
 import (
-   "./manager"
+	"./manager"
 )
-func main(){
-  manager:=manager.NewProyManager()
-  manager.Start()
+
+func main() {
+	manager := manager.NewProyManager()
+	manager.Start()
 }

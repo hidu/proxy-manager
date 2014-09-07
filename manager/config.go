@@ -1,16 +1,14 @@
 package manager
 
-import (
+import ()
 
-)
-
-type Config struct{
-  port int
-  confDir string
+type Config struct {
+	port    int
+	confDir string
 }
 
-func NewConfig() *Config{
-  config:=&Config{}
-  config.port=8090
-  return config
+func NewConfig() *Config {
+	config := &Config{}
+	config.port = 8090
+	return config
 }

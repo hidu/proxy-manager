@@ -6,7 +6,7 @@ import (
 )
 
 type HttpProxy struct {
-	GoProxy *goproxy.ProxyHttpServer
+	GoProxy      *goproxy.ProxyHttpServer
 	ProxyManager *ProxyManager
 }
 
@@ -17,6 +17,6 @@ func NewHttpProxy(manager *ProxyManager) *HttpProxy {
 	return proxy
 }
 
-func (httpProxy *HttpProxy)ServeHTTP(w http.ResponseWriter, req *http.Request){
-  httpProxy.GoProxy.ServeHTTP(w,req)
+func (httpProxy *HttpProxy) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	httpProxy.GoProxy.ServeHTTP(w, req)
 }
