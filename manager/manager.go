@@ -6,21 +6,30 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"os"
 	"sync/atomic"
 	"time"
 )
 
 type ProxyManager struct {
-	httpProxy *HttpProxy
-	config    *Config
-	reqNum    int64
+	httpClient *HttpClient
+	config     *Config
+	proxyPool  *ProxyPool
+	reqNum     int64
 }
 
-func NewProyManager() *ProxyManager {
+func NewProyManager(configPath string) *ProxyManager {
 	rand.Seed(time.Now().UnixNano())
 	manager := &ProxyManager{}
-	manager.httpProxy = NewHttpProxy(manager)
-	manager.config = NewConfig()
+	manager.config = LoadConfig(configPath)
+
+	if manager.config == nil {
+		os.Exit(1)
+	}
+
+	manager.proxyPool = LoadProxyPool(manager.config.confDir)
+
+	manager.httpClient = NewHttpClient(manager)
 	return manager
 }
 
@@ -49,7 +58,7 @@ func (manager *ProxyManager) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	if isLocalReq {
 		manager.serveLocalRequest(w, req)
 	} else {
-		manager.httpProxy.ServeHTTP(w, req)
+		manager.httpClient.ServeHTTP(w, req)
 	}
 }
 

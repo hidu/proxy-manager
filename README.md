@@ -1,2 +1,2 @@
-proxy-master
+proxy-manager
 ============
