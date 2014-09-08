@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
+	"time"
 )
 
 type Proxy struct {
@@ -17,6 +19,18 @@ type Proxy struct {
 	URL        *url.URL
 	Weight     int
 	StatusCode int
+	CheckUsed  int64 //ms
+	LastCheck  int64
+}
+
+func (proxy *Proxy) String() string {
+	return fmt.Sprintf("proxy=%s\tweight=%d\tlast_check:%d\tcheck_used:%d\tstatus:%d",
+		proxy.proxy,
+		proxy.Weight,
+		proxy.LastCheck,
+		proxy.CheckUsed,
+		proxy.StatusCode,
+	)
 }
 
 func NewProxy(proxyUrl string) *Proxy {
@@ -40,6 +54,10 @@ type ProxyPool struct {
 	ProxyManager       *ProxyManager
 	aliveCheckUrl      string
 	aliveCheckResponse *http.Response
+
+	checkChan   chan string
+	testRunChan chan bool
+	timeout     int
 }
 
 func LoadProxyPool(manager *ProxyManager) *ProxyPool {
@@ -49,11 +67,15 @@ func LoadProxyPool(manager *ProxyManager) *ProxyPool {
 	pool.proxyListAll = make(map[string]*Proxy)
 	pool.proxyUsed = make(map[int64]map[string]*Proxy)
 
+	pool.checkChan = make(chan string, 100)
+	pool.testRunChan = make(chan bool, 1)
+	pool.timeout = manager.config.timeout
+
 	pool.aliveCheckUrl = manager.config.aliveCheckUrl
 
 	if pool.aliveCheckUrl != "" {
 		var err error
-		pool.aliveCheckResponse, err = doRequestGet(pool.aliveCheckUrl, nil)
+		pool.aliveCheckResponse, err = doRequestGet(pool.aliveCheckUrl, nil, 0)
 		if err != nil {
 			log.Println("get origin alive response failed,url:", pool.aliveCheckUrl, "err:", err)
 			return nil
@@ -63,7 +85,18 @@ func LoadProxyPool(manager *ProxyManager) *ProxyPool {
 	}
 
 	pool.loadConf("pool.conf")
+
+	go pool.runTest()
+
 	return pool
+}
+
+func (pool *ProxyPool) String() string {
+	allProxy := []string{}
+	for _, proxy := range pool.proxyListAll {
+		allProxy = append(allProxy, proxy.String())
+	}
+	return strings.Join(allProxy, "\n")
 }
 
 func (pool *ProxyPool) loadConf(confName string) int {
@@ -82,7 +115,6 @@ func (pool *ProxyPool) loadConf(confName string) int {
 	datas, err := txtFile.KvMapSlice("=", true, defaultValues)
 	for _, kv := range datas {
 		pool.addProxy(kv)
-		go pool.TestProxyAddActive(kv["proxy"])
 	}
 	log.Println(len(datas), "proxy in pool")
 	return len(datas)
@@ -171,6 +203,32 @@ func (pool *ProxyPool) CleanSessionProxy(logid int64) {
 		delete(pool.proxyUsed, logid)
 	}
 }
+func (pool *ProxyPool) runTest() {
+	pool.testRunChan <- true
+	defer (func() {
+		<-pool.testRunChan
+	})()
+	start := time.Now()
+	proxyTotal := len(pool.proxyListAll)
+	log.Println("start test all proxy,total=", proxyTotal)
+
+	var wg sync.WaitGroup
+	for name := range pool.proxyListAll {
+		wg.Add(1)
+		go (func(proxyUrl string) {
+			pool.TestProxyAddActive(proxyUrl)
+			wg.Done()
+		})(name)
+	}
+	wg.Wait()
+
+	used := time.Now().Sub(start)
+	log.Println("test all proxy finish,total:", proxyTotal, "used:", used)
+
+	testResultFile := pool.ProxyManager.config.confDir + "/pool_checked.conf"
+	utils.File_put_contents(testResultFile, []byte(pool.String()))
+}
+
 func (pool *ProxyPool) TestProxyAddActive(proxy_url string) bool {
 	proxy := pool.GetProxy(proxy_url)
 	if proxy == nil {
@@ -186,45 +244,62 @@ func (pool *ProxyPool) TestProxyAddActive(proxy_url string) bool {
 }
 
 func (pool *ProxyPool) TestProxy(proxy *Proxy) bool {
+	pool.checkChan <- proxy.proxy
+	start := time.Now()
+	defer (func() {
+		<-pool.checkChan
+	})()
+
+	testlog := func(msg ...interface{}) {
+		used := time.Now().Sub(start)
+		proxy.CheckUsed = used.Nanoseconds() / 1000000
+		proxy.LastCheck = start.Unix()
+		log.Println("test proxy", proxy.proxy, fmt.Sprint(msg...), "used:", proxy.CheckUsed, "ms")
+	}
+
 	if pool.aliveCheckUrl != "" {
-		resp, err := doRequestGet(pool.aliveCheckUrl, proxy)
+		urlStr := strings.Replace(pool.aliveCheckUrl, "{%rand}", fmt.Sprintf("%d", start.UnixNano()), -1)
+		resp, err := doRequestGet(urlStr, proxy, pool.timeout)
 		if err != nil {
-			log.Println("test proxy failed:[", proxy.proxy, "]", err)
+			testlog("failed,", err.Error())
 			return false
 		} else {
 			cur_len := resp.Header.Get("Content-Length")
 			check_len := pool.aliveCheckResponse.Header.Get("Content-Length")
 			if cur_len != check_len {
-				log.Println("test proxy failed:[", proxy.proxy, "],Content-Length wrong,[", check_len, "!=", cur_len, "]")
+				testlog("failed ,content-length wrong,[", check_len, "!=", cur_len, "]")
 				return false
 			}
 		}
 	} else {
 		host, port, err := utils.Net_getHostPortFromUrl(proxy.proxy)
 		if err != nil {
-			log.Println("proxy url err:", err)
+			testlog("failed,proxy url err:", err)
 			return false
 		}
 		conn, netErr := net.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
 		if netErr != nil {
-			log.Println("test proxy failed:[", proxy.proxy, "]", netErr)
+			testlog("failed", netErr)
 			return false
 		}
 		conn.Close()
 	}
-	log.Println("test proxy pass,[", proxy.proxy, "]")
+	proxy.StatusCode = 1
+	testlog("pass")
 	return true
 }
 
-func doRequestGet(urlStr string, proxy *Proxy) (resp *http.Response, err error) {
+func doRequestGet(urlStr string, proxy *Proxy, timeout_sec int) (resp *http.Response, err error) {
 	client := &http.Client{}
+	if timeout_sec > 0 {
+		client.Timeout = time.Duration(timeout_sec) * time.Second
+	}
 	if proxy != nil {
 		proxyGetFn := func(req *http.Request) (*url.URL, error) {
 			return proxy.URL, nil
 		}
 		client.Transport = &http.Transport{Proxy: proxyGetFn}
 	}
-
 	req, _ := http.NewRequest("GET", urlStr, nil)
 	return client.Do(req)
 }
