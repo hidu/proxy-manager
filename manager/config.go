@@ -3,16 +3,18 @@ package manager
 import (
 	"github.com/Unknwon/goconfig"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 )
 
 type Config struct {
-	port       int
-	confDir    string
-	configFile string
-	timeout    int
-	re_try     int
+	port          int
+	confDir       string
+	configFile    string
+	timeout       int
+	re_try        int
+	aliveCheckUrl string
 }
 
 func LoadConfig(configPath string) *Config {
@@ -44,6 +46,15 @@ func LoadConfig(configPath string) *Config {
 	config.re_try = gconf.MustInt(goconfig.DEFAULT_SECTION, "re_try", 0)
 	if config.re_try > 10 {
 		config.re_try = 3
+	}
+
+	aliveCheckUrl := gconf.MustValue(goconfig.DEFAULT_SECTION, "alive_check", "")
+	_, err = url.Parse(aliveCheckUrl)
+	if err != nil {
+		log.Println("alive check url wrong:", err)
+		return nil
+	} else {
+		config.aliveCheckUrl = aliveCheckUrl
 	}
 
 	return config

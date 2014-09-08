@@ -77,7 +77,8 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 
 	client := &http.Client{}
 	max_re_try := httpClient.ProxyManager.config.re_try
-	for no := 0; no < max_re_try; no++ {
+	no := 0
+	for ; no < max_re_try; no++ {
 		rlog.addLog("try_no", no)
 		proxy, err := httpClient.ProxyManager.proxyPool.GetOneProxy(rlog.logId)
 		if err != nil {
@@ -103,9 +104,13 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 		}
 	}
 
+	w.Header().Set("x-man-try", fmt.Sprintf("%d", no))
+	w.Header().Set("x-man-try-max", fmt.Sprintf("%d", max_re_try))
+	w.Header().Set("x-man-id", fmt.Sprintf("%d", rlog.logId))
+
 	if err != nil || resp == nil {
 		w.WriteHeader(550)
-		w.Write([]byte("all failed," + fmt.Sprintf("try:%d", max_re_try+1)))
+		w.Write([]byte("all failed," + fmt.Sprintf("try:%d", no)))
 		return
 	}
 

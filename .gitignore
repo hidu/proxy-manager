@@ -22,3 +22,4 @@ _testmain.go
 *.exe
 *.test
 test
+conf/pool*

@@ -29,7 +29,10 @@ func NewProyManager(configPath string) *ProxyManager {
 		os.Exit(1)
 	}
 
-	manager.proxyPool = LoadProxyPool(manager.config.confDir)
+	manager.proxyPool = LoadProxyPool(manager)
+	if manager.proxyPool == nil {
+		os.Exit(1)
+	}
 
 	manager.httpClient = NewHttpClient(manager)
 	return manager
