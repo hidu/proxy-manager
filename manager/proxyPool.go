@@ -4,26 +4,28 @@ import (
 	"fmt"
 	"github.com/hidu/goutils"
 	"log"
-	"math/rand"
-	"net/http"
+	//	"math/rand"
 	"net/url"
-	"strings"
+	//	"strings"
+	"strconv"
 	"sync"
 )
 
 type Proxy struct {
-	proxyUrl string
-	urlObj   *url.URL
+	proxy  string
+	URL    *url.URL
+	Weight int
 }
 
 func NewProxy(proxyUrl string) *Proxy {
-	proxy := &Proxy{proxyUrl: proxyUrl}
+	proxy := &Proxy{proxy: proxyUrl}
 	var err error
-	proxy.urlObj, err = url.Parse(proxyUrl)
+	proxy.URL, err = url.Parse(proxyUrl)
 	if err != nil {
 		log.Println("proxy info wrong", err)
 		return nil
 	}
+	proxy.Weight = 100
 	return proxy
 }
 
@@ -33,12 +35,15 @@ type ProxyPool struct {
 	proxyListActive map[string]*Proxy
 	proxyListAll    map[string]*Proxy
 	mu              sync.RWMutex
+
+	proxyUsed map[int64]map[string]*Proxy
 }
 
 func LoadProxyPool(confDir string) *ProxyPool {
 	pool := &ProxyPool{}
 	pool.proxyListActive = make(map[string]*Proxy)
 	pool.proxyListAll = make(map[string]*Proxy)
+	pool.proxyUsed = make(map[int64]map[string]*Proxy)
 
 	confPath := confDir + "/pool.conf"
 
@@ -47,26 +52,33 @@ func LoadProxyPool(confDir string) *ProxyPool {
 		log.Println("load proxy pool failed")
 		return nil
 	}
-	for _, line := range txtFile.Lines {
-		arr := line.Slice()
-		if len(arr) > 0 {
-			pool.addProxy(arr[0])
-			pool.addProxyActive(arr[0])
-		}
+	defaultValues := make(map[string]string)
+	defaultValues["proxy"] = "required"
+	defaultValues["weight"] = "1"
+
+	datas, err := txtFile.KvMapSlice("=", true, defaultValues)
+	for _, kv := range datas {
+		pool.addProxy(kv)
+		pool.addProxyActive(kv["proxy"])
 	}
 	return pool
 }
 
-func (pool *ProxyPool) addProxy(proxy_url string) {
-	proxy_url = strings.TrimSpace(proxy_url)
-	if proxy_url == "" {
+func (pool *ProxyPool) addProxy(info map[string]string) {
+	if info == nil {
 		return
 	}
-	proxy := NewProxy(proxy_url)
-	if proxy != nil {
-		if _, has := pool.proxyListAll[proxy.proxyUrl]; !has {
-			pool.proxyListAll[proxy.proxyUrl] = proxy
-		}
+	proxy := NewProxy(info["proxy"])
+	if proxy == nil {
+		return
+	}
+	var err error
+	proxy.Weight, err = strconv.Atoi(info["weight"])
+	if err != nil {
+		proxy.Weight = 100
+	}
+	if _, has := pool.proxyListAll[proxy.proxy]; !has {
+		pool.proxyListAll[proxy.proxy] = proxy
 	}
 }
 
@@ -80,29 +92,45 @@ func (pool *ProxyPool) addProxyActive(proxy_url string) bool {
 	return false
 }
 
-func (pool *ProxyPool) GetOneProxy() (*Proxy, error) {
+var errorNoProxy error = fmt.Errorf("no active proxy")
+
+func (pool *ProxyPool) GetOneProxy(logid int64) (*Proxy, error) {
 	pool.mu.RLock()
 	defer pool.mu.RUnlock()
 	l := len(pool.proxyListActive)
 	if l == 0 {
-		return nil, fmt.Errorf("no active proxy")
+		return nil, errorNoProxy
 	}
-	n := rand.Int() % l
-	index := 0
+
+	sessionProxys, has := pool.proxyUsed[logid]
+
+	if !has {
+		sessionProxys = make(map[string]*Proxy)
+		pool.proxyUsed[logid] = sessionProxys
+	}
+
 	for _, proxy := range pool.proxyListActive {
-		if index == n {
+		if _, has := sessionProxys[proxy.proxy]; !has {
+			sessionProxys[proxy.proxy] = proxy
 			return proxy, nil
 		}
-		index++
 	}
-	return nil, fmt.Errorf("miss")
+	return nil, errorNoProxy
 }
 
-func (pool *ProxyPool) GetOnePeoxyUrl(req *http.Request) (*url.URL, error) {
-	proxy, err := pool.GetOneProxy()
-	if err != nil {
-		log.Println(err)
-		return ProxyNo.urlObj, err
+func (pool *ProxyPool) CleanSessionProxy(logid int64) {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+	if _, has := pool.proxyUsed[logid]; has {
+		delete(pool.proxyUsed, logid)
 	}
-	return proxy.urlObj, nil
 }
+
+//func (pool *ProxyPool) GetOnePeoxyUrl(req *http.Request) (*url.URL, error) {
+//	proxy, err := pool.GetOneProxy()
+//	if err != nil {
+//		log.Println(err)
+//		return ProxyNo.urlObj, err
+//	}
+//	return proxy.urlObj, nil
+//}

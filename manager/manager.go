@@ -11,6 +11,8 @@ import (
 	"time"
 )
 
+var PROXY_DEBUG bool = false
+
 type ProxyManager struct {
 	httpClient *HttpClient
 	config     *Config
