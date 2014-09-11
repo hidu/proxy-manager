@@ -14,11 +14,31 @@ import (
 	"time"
 )
 
+type PROXY_STATUS int
+
+const (
+	PROXY_STATUS_UNKNOW PROXY_STATUS = iota
+	PROXY_STATUS_ACTIVE
+	PROXY_STATUS_UNAVAILABLE
+)
+
+func (status PROXY_STATUS) String() string {
+	switch status {
+	case PROXY_STATUS_UNKNOW:
+		return "unknow"
+	case PROXY_STATUS_ACTIVE:
+		return "active"
+	case PROXY_STATUS_UNAVAILABLE:
+		return "unavailable"
+	}
+	return fmt.Sprintf("unknow status:%d", status)
+}
+
 type Proxy struct {
 	proxy      string
 	URL        *url.URL
 	Weight     int
-	StatusCode int
+	StatusCode PROXY_STATUS
 	CheckUsed  int64 //ms
 	LastCheck  int64
 }
@@ -33,6 +53,10 @@ func (proxy *Proxy) String() string {
 	)
 }
 
+func (proxy *Proxy) IsOk() bool {
+	return proxy.StatusCode == PROXY_STATUS_ACTIVE
+}
+
 func NewProxy(proxyUrl string) *Proxy {
 	proxy := &Proxy{proxy: proxyUrl}
 	var err error
@@ -41,7 +65,7 @@ func NewProxy(proxyUrl string) *Proxy {
 		log.Println("proxy info wrong", err)
 		return nil
 	}
-	proxy.Weight = 100
+	proxy.Weight = 0
 	return proxy
 }
 
@@ -58,6 +82,7 @@ type ProxyPool struct {
 	checkChan   chan string
 	testRunChan chan bool
 	timeout     int
+	checkInterval int64
 }
 
 func LoadProxyPool(manager *ProxyManager) *ProxyPool {
@@ -72,7 +97,8 @@ func LoadProxyPool(manager *ProxyManager) *ProxyPool {
 	pool.timeout = manager.config.timeout
 
 	pool.aliveCheckUrl = manager.config.aliveCheckUrl
-
+	pool.checkInterval=manager.config.checkInterval
+	
 	if pool.aliveCheckUrl != "" {
 		var err error
 		pool.aliveCheckResponse, err = doRequestGet(pool.aliveCheckUrl, nil, 0)
@@ -84,7 +110,22 @@ func LoadProxyPool(manager *ProxyManager) *ProxyPool {
 		}
 	}
 
-	pool.loadConf("pool.conf")
+	proxyAll, err := pool.loadConf("pool.conf")
+	if err != nil {
+		return nil
+	}
+	proxyAllChecked, _ := pool.loadConf("pool_checked.conf")
+
+	pool.proxyListAll = proxyAllChecked
+	for _url, proxy := range proxyAll {
+		if _, has := pool.proxyListAll[_url]; !has {
+			pool.proxyListAll[_url] = proxy
+		}
+	}
+	if len(pool.proxyListAll)==0 {
+		log.Println("proxy pool list is empty")
+		return nil
+	}
 
 	go pool.runTest()
 
@@ -99,45 +140,58 @@ func (pool *ProxyPool) String() string {
 	return strings.Join(allProxy, "\n")
 }
 
-func (pool *ProxyPool) loadConf(confName string) int {
+func (pool *ProxyPool) loadConf(confName string) (map[string]*Proxy, error) {
+	proxys := make(map[string]*Proxy)
 	confPath := pool.ProxyManager.config.confDir + "/" + confName
 
 	txtFile, err := utils.NewTxtFile(confPath)
 	if err != nil {
-		log.Println("load proxy pool failed")
-		return 0
+		log.Println("load proxy pool failed[", confName, "]")
+		return proxys, err
 	}
 	defaultValues := make(map[string]string)
 	defaultValues["proxy"] = "required"
 	defaultValues["weight"] = "1"
 	defaultValues["status"] = "1"
+	defaultValues["last_check"] = "0"
+	defaultValues["check_used"] = "0"
 
 	datas, err := txtFile.KvMapSlice("=", true, defaultValues)
-	for _, kv := range datas {
-		pool.addProxy(kv)
+	if err != nil {
+		return proxys, err
 	}
-	log.Println(len(datas), "proxy in pool")
-	return len(datas)
+	for _, kv := range datas {
+		proxy := pool.parseProxy(kv)
+		if proxy != nil {
+			proxys[proxy.proxy] = proxy
+		}
+	}
+	return proxys, nil
 }
 
-func (pool *ProxyPool) addProxy(info map[string]string) {
+func (pool *ProxyPool) parseProxy(info map[string]string) *Proxy {
 	if info == nil {
-		return
+		return nil
 	}
 	proxy := NewProxy(info["proxy"])
 	if proxy == nil {
-		return
+		return nil
 	}
+	intValues := make(map[string]int)
+	intFields := []string{"weight", "status", "check_used", "last_check"}
 	var err error
-	proxy.Weight, err = strconv.Atoi(info["weight"])
-	if err != nil {
-		proxy.Weight = 100
+	for _, fieldName := range intFields {
+		intValues[fieldName], err = strconv.Atoi(info[fieldName])
+		if err != nil {
+			intValues[fieldName] = 0
+		}
 	}
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
-	if _, has := pool.proxyListAll[proxy.proxy]; !has {
-		pool.proxyListAll[proxy.proxy] = proxy
-	}
+	proxy.Weight = intValues["weight"]
+	proxy.StatusCode = PROXY_STATUS(intValues["status"])
+	proxy.CheckUsed = int64(intValues["check_used"])
+	proxy.LastCheck = int64(intValues["last_check"])
+
+	return proxy
 }
 
 func (pool *ProxyPool) GetProxy(proxy_url string) *Proxy {
@@ -223,7 +277,7 @@ func (pool *ProxyPool) runTest() {
 	wg.Wait()
 
 	used := time.Now().Sub(start)
-	log.Println("test all proxy finish,total:", proxyTotal, "used:", used)
+	log.Println("test all proxy finish,total:", proxyTotal, "used:", used,"activeTotal:",len(pool.proxyListActive))
 
 	testResultFile := pool.ProxyManager.config.confDir + "/pool_checked.conf"
 	utils.File_put_contents(testResultFile, []byte(pool.String()))
@@ -249,6 +303,11 @@ func (pool *ProxyPool) TestProxy(proxy *Proxy) bool {
 	defer (func() {
 		<-pool.checkChan
 	})()
+	if start.Unix()-proxy.LastCheck < pool.checkInterval {
+		return proxy.IsOk()
+	}
+
+	proxy.StatusCode = PROXY_STATUS_UNAVAILABLE
 
 	testlog := func(msg ...interface{}) {
 		used := time.Now().Sub(start)
@@ -259,7 +318,7 @@ func (pool *ProxyPool) TestProxy(proxy *Proxy) bool {
 
 	if pool.aliveCheckUrl != "" {
 		urlStr := strings.Replace(pool.aliveCheckUrl, "{%rand}", fmt.Sprintf("%d", start.UnixNano()), -1)
-		resp, err := doRequestGet(urlStr, proxy, pool.timeout)
+		resp, err := doRequestGet(urlStr, proxy, pool.timeout/2)
 		if err != nil {
 			testlog("failed,", err.Error())
 			return false
@@ -284,7 +343,7 @@ func (pool *ProxyPool) TestProxy(proxy *Proxy) bool {
 		}
 		conn.Close()
 	}
-	proxy.StatusCode = 1
+	proxy.StatusCode = PROXY_STATUS_ACTIVE
 	testlog("pass")
 	return true
 }

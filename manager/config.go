@@ -15,6 +15,7 @@ type Config struct {
 	timeout       int
 	re_try        int
 	aliveCheckUrl string
+	checkInterval int64
 }
 
 func LoadConfig(configPath string) *Config {
@@ -41,6 +42,10 @@ func LoadConfig(configPath string) *Config {
 	config.timeout = gconf.MustInt(goconfig.DEFAULT_SECTION, "timeout", 30)
 	if config.timeout > 120 {
 		config.timeout = 120
+	}
+	config.checkInterval= gconf.MustInt64(goconfig.DEFAULT_SECTION, "check_interval", 3600)
+	if(config.checkInterval<=60){
+		config.checkInterval=1800
 	}
 
 	config.re_try = gconf.MustInt(goconfig.DEFAULT_SECTION, "re_try", 0)
