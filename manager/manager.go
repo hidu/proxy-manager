@@ -21,6 +21,7 @@ type ProxyManager struct {
 }
 
 func NewProyManager(configPath string) *ProxyManager {
+	log.Println("loading...")
 	rand.Seed(time.Now().UnixNano())
 	manager := &ProxyManager{}
 	manager.config = LoadConfig(configPath)

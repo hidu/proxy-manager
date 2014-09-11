@@ -50,6 +50,7 @@ type HttpClient struct {
 }
 
 func NewHttpClient(manager *ProxyManager) *HttpClient {
+	log.Println("loading http client...")
 	proxy := new(HttpClient)
 	proxy.ProxyManager = manager
 
@@ -76,7 +77,7 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 	var err error
 
 	client := &http.Client{}
-	max_re_try := httpClient.ProxyManager.config.re_try
+	max_re_try := httpClient.ProxyManager.config.re_try + 1
 	no := 0
 	for ; no < max_re_try; no++ {
 		rlog.addLog("try_no", no)
@@ -87,6 +88,7 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 			break
 		}
 		rlog.addLog("proxy", proxy.proxy)
+		rlog.addLog("proxyUsed", proxy.Used)
 		proxyGetFn := func(req *http.Request) (*url.URL, error) {
 			return proxy.URL, nil
 		}

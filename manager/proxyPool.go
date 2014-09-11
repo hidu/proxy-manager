@@ -41,10 +41,11 @@ type Proxy struct {
 	StatusCode PROXY_STATUS
 	CheckUsed  int64 //ms
 	LastCheck  int64
+	Used       int64
 }
 
 func (proxy *Proxy) String() string {
-	return fmt.Sprintf("proxy=%s\tweight=%d\tlast_check:%d\tcheck_used:%d\tstatus:%d",
+	return fmt.Sprintf("proxy=%s\tweight=%d\tlast_check=%d\tcheck_used=%d\tstatus=%d",
 		proxy.proxy,
 		proxy.Weight,
 		proxy.LastCheck,
@@ -79,29 +80,37 @@ type ProxyPool struct {
 	aliveCheckUrl      string
 	aliveCheckResponse *http.Response
 
-	checkChan   chan string
-	testRunChan chan bool
-	timeout     int
+	checkChan     chan string
+	testRunChan   chan bool
+	timeout       int
 	checkInterval int64
+
+	proxyUsePos     int64
+	proxyUseList    []string
+	proxyActiveUsed map[string]string
 }
 
 func LoadProxyPool(manager *ProxyManager) *ProxyPool {
+	log.Println("loading proxy pool...")
 	pool := &ProxyPool{}
 	pool.ProxyManager = manager
 	pool.proxyListActive = make(map[string]*Proxy)
 	pool.proxyListAll = make(map[string]*Proxy)
 	pool.proxyUsed = make(map[int64]map[string]*Proxy)
 
+	pool.proxyActiveUsed = make(map[string]string)
+
 	pool.checkChan = make(chan string, 100)
 	pool.testRunChan = make(chan bool, 1)
 	pool.timeout = manager.config.timeout
 
 	pool.aliveCheckUrl = manager.config.aliveCheckUrl
-	pool.checkInterval=manager.config.checkInterval
-	
+	pool.checkInterval = manager.config.checkInterval
+
 	if pool.aliveCheckUrl != "" {
 		var err error
-		pool.aliveCheckResponse, err = doRequestGet(pool.aliveCheckUrl, nil, 0)
+		urlStr := strings.Replace(pool.aliveCheckUrl, "{%rand}", fmt.Sprintf("%d", time.Now().UnixNano()), -1)
+		pool.aliveCheckResponse, err = doRequestGet(urlStr, nil, 3)
 		if err != nil {
 			log.Println("get origin alive response failed,url:", pool.aliveCheckUrl, "err:", err)
 			return nil
@@ -122,12 +131,16 @@ func LoadProxyPool(manager *ProxyManager) *ProxyPool {
 			pool.proxyListAll[_url] = proxy
 		}
 	}
-	if len(pool.proxyListAll)==0 {
+	if len(pool.proxyListAll) == 0 {
 		log.Println("proxy pool list is empty")
 		return nil
 	}
 
 	go pool.runTest()
+
+	utils.SetInterval(func() {
+		pool.runTest()
+	}, pool.checkInterval)
 
 	return pool
 }
@@ -227,8 +240,8 @@ func (pool *ProxyPool) removeProxyActive(proxy_url string) {
 var errorNoProxy error = fmt.Errorf("no active proxy")
 
 func (pool *ProxyPool) GetOneProxy(logid int64) (*Proxy, error) {
-	pool.mu.RLock()
-	defer pool.mu.RUnlock()
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
 	l := len(pool.proxyListActive)
 	if l == 0 {
 		return nil, errorNoProxy
@@ -242,8 +255,16 @@ func (pool *ProxyPool) GetOneProxy(logid int64) (*Proxy, error) {
 	}
 
 	for _, proxy := range pool.proxyListActive {
+		if _, has := pool.proxyActiveUsed[proxy.proxy]; has {
+			continue
+		}
 		if _, has := sessionProxys[proxy.proxy]; !has {
 			sessionProxys[proxy.proxy] = proxy
+			proxy.Used++
+			pool.proxyActiveUsed[proxy.proxy] = "1"
+			if len(pool.proxyActiveUsed) >= len(pool.proxyListActive) {
+				pool.proxyActiveUsed = make(map[string]string)
+			}
 			return proxy, nil
 		}
 	}
@@ -277,7 +298,7 @@ func (pool *ProxyPool) runTest() {
 	wg.Wait()
 
 	used := time.Now().Sub(start)
-	log.Println("test all proxy finish,total:", proxyTotal, "used:", used,"activeTotal:",len(pool.proxyListActive))
+	log.Println("test all proxy finish,total:", proxyTotal, "used:", used, "activeTotal:", len(pool.proxyListActive))
 
 	testResultFile := pool.ProxyManager.config.confDir + "/pool_checked.conf"
 	utils.File_put_contents(testResultFile, []byte(pool.String()))
@@ -303,7 +324,7 @@ func (pool *ProxyPool) TestProxy(proxy *Proxy) bool {
 	defer (func() {
 		<-pool.checkChan
 	})()
-	if start.Unix()-proxy.LastCheck < pool.checkInterval {
+	if start.Unix()-proxy.LastCheck < pool.checkInterval/2 {
 		return proxy.IsOk()
 	}
 

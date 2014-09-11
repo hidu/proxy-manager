@@ -43,9 +43,9 @@ func LoadConfig(configPath string) *Config {
 	if config.timeout > 120 {
 		config.timeout = 120
 	}
-	config.checkInterval= gconf.MustInt64(goconfig.DEFAULT_SECTION, "check_interval", 3600)
-	if(config.checkInterval<=60){
-		config.checkInterval=1800
+	config.checkInterval = gconf.MustInt64(goconfig.DEFAULT_SECTION, "check_interval", 3600)
+	if config.checkInterval <= 60 {
+		config.checkInterval = 1800
 	}
 
 	config.re_try = gconf.MustInt(goconfig.DEFAULT_SECTION, "re_try", 0)
