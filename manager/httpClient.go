@@ -59,12 +59,15 @@ func NewHttpClient(manager *ProxyManager) *HttpClient {
 
 func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	rlog := NewRequestLog(req)
-
+	
 	rlog.logId = httpClient.ProxyManager.reqNum + time.Now().Unix()
-
+	
 	defer httpClient.ProxyManager.proxyPool.CleanSessionProxy(rlog.logId)
-
 	defer rlog.print()
+	user:=getAuthorInfo(req)
+	rlog.addLog("uname",user.Name)
+	
+	
 	if PROXY_DEBUG {
 		dump, _ := httputil.DumpRequest(req, true)
 		log.Println("req dump:\n", string(dump))
@@ -142,6 +145,9 @@ func copyHeaders(dst, src http.Header) {
 		dst.Del(k)
 	}
 	for k, vs := range src {
+		 if len(k) > 5 && k[:6] == "Proxy-" {
+			continue
+		}
 		for _, v := range vs {
 			dst.Add(k, v)
 		}

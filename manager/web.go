@@ -31,6 +31,7 @@ func (manager *ProxyManager) serveLocalRequest(w http.ResponseWriter, req *http.
 	values["version"] = ProxyVersion
 	values["notice"] = manager.config.notice
 	values["port"] = fmt.Sprintf("%d", manager.config.port)
+	values["config"] = manager.config
 
 	values["proxyTotal"] = len(manager.proxyPool.proxyListActive)
 	values["proxyAllNum"] = len(manager.proxyPool.proxyListAll)
