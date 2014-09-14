@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="author" content="duwei">
+<meta name="src" content="https://github.com/hidu/proxy-manager">
+<title>proxy-manager | {{.version}}</title>
+<link rel="stylesheet" href="/res/css/flat.css">
+<link rel="stylesheet" href="/res/css/style.css">
+</head>
+<body>
+<div id="nav">
+<div id="menu">
+       <ul id="left_submenu">
+           <li class="border_first"><a href="/">index</a></li>
+           <li><a href="/add">add</a></li>
+           <li><a href="/test">test</a></li>
+           <li><a href="/about">about</a></li>
+       </ul>
+       
+       <div class='right'>
+          <ul>
+            <li  class="border_first">{{.notice}}</li>
+         </ul> 
+         </div>
+       <div class="clear"></div>
+</div>
+</div>
+<div class="clear"></div>
+<div>
+<div id="bd0">
+{{.body}}
+</div>
+</div>
+<div class="clear"></div>
+<div id="log_div"></div>
+</body>
+</html>

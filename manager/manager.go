@@ -57,6 +57,7 @@ func (manager *ProxyManager) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	atomic.AddInt64(&manager.reqNum, 1)
 
 	isLocalReq := port_int == manager.config.port
+
 	if isLocalReq {
 		isLocalReq = utils.Net_isLocalIp(host)
 	}
@@ -66,8 +67,4 @@ func (manager *ProxyManager) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	} else {
 		manager.httpClient.ServeHTTP(w, req)
 	}
-}
-
-func (manager *ProxyManager) serveLocalRequest(w http.ResponseWriter, req *http.Request) {
-	fmt.Fprint(w, "hello proxy manager")
 }

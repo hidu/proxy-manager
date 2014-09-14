@@ -14,69 +14,14 @@ import (
 	"time"
 )
 
-type PROXY_STATUS int
-
-const (
-	PROXY_STATUS_UNKNOW PROXY_STATUS = iota
-	PROXY_STATUS_ACTIVE
-	PROXY_STATUS_UNAVAILABLE
-)
-
-func (status PROXY_STATUS) String() string {
-	switch status {
-	case PROXY_STATUS_UNKNOW:
-		return "unknow"
-	case PROXY_STATUS_ACTIVE:
-		return "active"
-	case PROXY_STATUS_UNAVAILABLE:
-		return "unavailable"
-	}
-	return fmt.Sprintf("unknow status:%d", status)
-}
-
-type Proxy struct {
-	proxy      string
-	URL        *url.URL
-	Weight     int
-	StatusCode PROXY_STATUS
-	CheckUsed  int64 //ms
-	LastCheck  int64
-	Used       int64
-}
-
-func (proxy *Proxy) String() string {
-	return fmt.Sprintf("proxy=%s\tweight=%d\tlast_check=%d\tcheck_used=%d\tstatus=%d",
-		proxy.proxy,
-		proxy.Weight,
-		proxy.LastCheck,
-		proxy.CheckUsed,
-		proxy.StatusCode,
-	)
-}
-
-func (proxy *Proxy) IsOk() bool {
-	return proxy.StatusCode == PROXY_STATUS_ACTIVE
-}
-
-func NewProxy(proxyUrl string) *Proxy {
-	proxy := &Proxy{proxy: proxyUrl}
-	var err error
-	proxy.URL, err = url.Parse(proxyUrl)
-	if err != nil {
-		log.Println("proxy info wrong", err)
-		return nil
-	}
-	proxy.Weight = 0
-	return proxy
-}
-
 type ProxyPool struct {
 	proxyListActive map[string]*Proxy
 	proxyListAll    map[string]*Proxy
 	mu              sync.RWMutex
 
-	proxyUsed          map[int64]map[string]*Proxy
-	ProxyManager       *ProxyManager
+	SessionProxys map[int64]map[string]*Proxy
+	ProxyManager  *ProxyManager
+
 	aliveCheckUrl      string
 	aliveCheckResponse *http.Response
 
@@ -85,9 +30,9 @@ type ProxyPool struct {
 	timeout       int
 	checkInterval int64
 
-	proxyUsePos     int64
-	proxyUseList    []string
 	proxyActiveUsed map[string]string
+
+	Count *ProxyCount
 }
 
 func LoadProxyPool(manager *ProxyManager) *ProxyPool {
@@ -96,7 +41,7 @@ func LoadProxyPool(manager *ProxyManager) *ProxyPool {
 	pool.ProxyManager = manager
 	pool.proxyListActive = make(map[string]*Proxy)
 	pool.proxyListAll = make(map[string]*Proxy)
-	pool.proxyUsed = make(map[int64]map[string]*Proxy)
+	pool.SessionProxys = make(map[int64]map[string]*Proxy)
 
 	pool.proxyActiveUsed = make(map[string]string)
 
@@ -106,6 +51,7 @@ func LoadProxyPool(manager *ProxyManager) *ProxyPool {
 
 	pool.aliveCheckUrl = manager.config.aliveCheckUrl
 	pool.checkInterval = manager.config.checkInterval
+	pool.Count = NewProxyCount()
 
 	if pool.aliveCheckUrl != "" {
 		var err error
@@ -247,11 +193,11 @@ func (pool *ProxyPool) GetOneProxy(logid int64) (*Proxy, error) {
 		return nil, errorNoProxy
 	}
 
-	sessionProxys, has := pool.proxyUsed[logid]
+	sessionProxys, has := pool.SessionProxys[logid]
 
 	if !has {
 		sessionProxys = make(map[string]*Proxy)
-		pool.proxyUsed[logid] = sessionProxys
+		pool.SessionProxys[logid] = sessionProxys
 	}
 
 	for _, proxy := range pool.proxyListActive {
@@ -274,8 +220,8 @@ func (pool *ProxyPool) GetOneProxy(logid int64) (*Proxy, error) {
 func (pool *ProxyPool) CleanSessionProxy(logid int64) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
-	if _, has := pool.proxyUsed[logid]; has {
-		delete(pool.proxyUsed, logid)
+	if _, has := pool.SessionProxys[logid]; has {
+		delete(pool.SessionProxys, logid)
 	}
 }
 func (pool *ProxyPool) runTest() {
@@ -367,6 +313,11 @@ func (pool *ProxyPool) TestProxy(proxy *Proxy) bool {
 	proxy.StatusCode = PROXY_STATUS_ACTIVE
 	testlog("pass")
 	return true
+}
+
+func (pool *ProxyPool) MarkProxyStatus(proxy *Proxy, status PROXY_USED_STATUS) {
+	proxy.Count.MarkStatus(status)
+	pool.Count.MarkStatus(status)
 }
 
 func doRequestGet(urlStr string, proxy *Proxy, timeout_sec int) (resp *http.Response, err error) {

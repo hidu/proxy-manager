@@ -9,6 +9,8 @@ import (
 )
 
 type Config struct {
+	title         string
+	notice        string
 	port          int
 	confDir       string
 	configFile    string
@@ -37,6 +39,10 @@ func LoadConfig(configPath string) *Config {
 		log.Println("load config failed:", err)
 		return nil
 	}
+	config.title = gconf.MustValue(goconfig.DEFAULT_SECTION, "title", "")
+
+	config.notice = gconf.MustValue(goconfig.DEFAULT_SECTION, "notice", "")
+
 	config.port = gconf.MustInt(goconfig.DEFAULT_SECTION, "port", 8090)
 
 	config.timeout = gconf.MustInt(goconfig.DEFAULT_SECTION, "timeout", 30)
