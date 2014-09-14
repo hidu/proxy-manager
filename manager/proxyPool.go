@@ -108,6 +108,11 @@ func (pool *ProxyPool) loadConf(confName string) (map[string]*Proxy, error) {
 		log.Println("load proxy pool failed[", confName, "]")
 		return proxys, err
 	}
+	return pool.loadProxysFromTxtFile(txtFile)
+}
+
+func (pool *ProxyPool) loadProxysFromTxtFile(txtFile *utils.TxtFile) (map[string]*Proxy, error) {
+	proxys := make(map[string]*Proxy)
 	defaultValues := make(map[string]string)
 	defaultValues["proxy"] = "required"
 	defaultValues["weight"] = "1"
@@ -171,6 +176,17 @@ func (pool *ProxyPool) addProxyActive(proxy_url string) bool {
 			pool.proxyListActive[proxy_url] = proxy
 			return true
 		}
+	}
+	return false
+}
+
+func (pool *ProxyPool) addProxy(proxy *Proxy) bool {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+
+	if _, has := pool.proxyListAll[proxy.proxy]; !has {
+		pool.proxyListAll[proxy.proxy] = proxy
+		return true
 	}
 	return false
 }

@@ -18,12 +18,14 @@ type ProxyManager struct {
 	config     *Config
 	proxyPool  *ProxyPool
 	reqNum     int64
+	startTime  time.Time
 }
 
 func NewProyManager(configPath string) *ProxyManager {
 	log.Println("loading...")
 	rand.Seed(time.Now().UnixNano())
 	manager := &ProxyManager{}
+	manager.startTime = time.Now()
 	manager.config = LoadConfig(configPath)
 
 	if manager.config == nil {

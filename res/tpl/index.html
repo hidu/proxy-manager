@@ -1,3 +1,12 @@
-<div>proxy active:{{.proxyTotal}}</div>
-<div>proxy total:{{.proxyAllNum}}</div>
-<div>proxy request total:{{.proxyReqTotal}}</div>
+<br/>
+<br/>
+<table style="width:400px;margin:auto auto" class="tb_1">
+<caption>proxy manager status</caption>
+  <tr><th width="150px">start</th> <td>{{.startTime}}</td></tr>
+  <tr><th>active</th> <td>{{.proxyTotal}}</td></tr>
+  <tr><th>total</th> <td>{{.proxyAllNum}}</td></tr>
+  <tr><th>request total</th> <td>{{.proxyReqTotal}}</td></tr>
+  <tr><th>request suc</th> <td>{{.proxy_count_suc}}</td></tr>
+  <tr><th>request failed</th> <td>{{.proxy_count_failed}}</td></tr>
+</table>
+

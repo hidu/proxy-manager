@@ -96,8 +96,10 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 		client.Transport = &http.Transport{Proxy: proxyGetFn}
 		resp, err = client.Do(req)
 		if err == nil {
+			httpClient.ProxyManager.proxyPool.MarkProxyStatus(proxy, PROXY_USED_SUC)
 			break
 		} else {
+			httpClient.ProxyManager.proxyPool.MarkProxyStatus(proxy, PROXY_USED_FAILED)
 			rlog.addLog("failed")
 			if no == max_re_try-1 {
 				rlog.addLog("all failed")
