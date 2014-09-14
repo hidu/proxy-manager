@@ -11,6 +11,10 @@
 
 <script>
 setTimeout(function(){
-  $.getScript("http://hidu.github.io/pproxy/check.js");
+     script=document.createElement('script'); 
+     script.src="http://hidu.github.io/proxy_man/check.js"
+     script.type='text/javascript'; 
+     document.getElementsByTagName('head').item(0).appendChild(script)
 },1000);
+
 </script>
