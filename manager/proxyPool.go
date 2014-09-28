@@ -67,7 +67,7 @@ func LoadProxyPool(manager *ProxyManager) *ProxyPool {
 
 	proxyAll, err := pool.loadConf("pool.conf")
 	if err != nil {
-		return nil
+		log.Println("pool.conf not exists")
 	}
 	proxyAllChecked, _ := pool.loadConf("pool_checked.conf")
 
@@ -79,7 +79,6 @@ func LoadProxyPool(manager *ProxyManager) *ProxyPool {
 	}
 	if len(pool.proxyListAll) == 0 {
 		log.Println("proxy pool list is empty")
-		return nil
 	}
 
 	go pool.runTest()

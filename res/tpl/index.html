@@ -1,13 +1,52 @@
 <br/>
 <br/>
-<table style="width:400px;margin:auto auto" class="tb_1">
-<caption>proxy manager status</caption>
-  <tr><th width="150px">start</th> <td>{{.startTime}}</td></tr>
-  <tr><th>active</th> <td>{{.proxyTotal}}</td></tr>
-  <tr><th>total</th> <td>{{.proxyAllNum}}</td></tr>
+<table style="width:100%">
+<tr>
+<td width="400px" valign="top">
+<table style="width:100%" class="tb_1">
+<caption>status</caption>
+  <tr><th width="150px">server start</th> <td>{{.startTime}}</td></tr>
+  <tr><th>proxy active</th> <td>{{.proxyTotal}}</td></tr>
+  <tr><th>proxy total</th> <td>{{.proxyAllNum}}</td></tr>
   <tr><th>request total</th> <td>{{.proxyReqTotal}}</td></tr>
   <tr><th>request suc</th> <td>{{.proxy_count_suc}}</td></tr>
   <tr><th>request failed</th> <td>{{.proxy_count_failed}}</td></tr>
   
+</table>
+</td>
+<td width="20px"></td>
+<td valign="top">
+<div class="h6">useage:</div>
+<div>
+
+<table class="tb_1">
+  <tr>
+    <td class="t_c">client</td>
+    <td class="t_c" width="20%">proxy</td>
+    <td class="t_c" width="20%">proxy pool</td>
+    <td class="t_c" width="20%">dst</td>
+  </tr>
+  <tr>
+    <td rowspan="4" class="t_c">
+    use proxy <font color="blue">http://name:psw@{{.proxy_host}}:{{.proxy_port}}</font>
+    </td>
+    <td rowspan="4" class="t_c">{{.proxy_host}}:{{.proxy_port}} <span class="right">&lt;-</span></td>
+    <td nowrap="nowrap">xxx.xxx.xxx:1234</td>
+    <td rowspan="4">www.baidu.com</td>
+  </tr>
+  <tr>
+    <td>xxx.xxx.xxx:2345</td>
+  </tr>
+  <tr>
+   <td>xxx.xxx.xxx:4567</td>
+  </tr>
+  <tr>
+   <td>xxx.xxx.xxx:3128</td>
+  </tr>
+</table>
+
+</div>
+</td>
+</tr>
 </table>
 

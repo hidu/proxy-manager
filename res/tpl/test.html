@@ -3,12 +3,12 @@
 </style>
 
 <br>
-<b>proxy test:</b>
+<div class="h6">proxy test:</div>
 <form method="post" action="/test" id="test_form" target="_blank">
 <table width="80%">
 <tr>
 <th width="90px"><span style="color:red">*</span>url:</th>
-<td><input type="url" name="url" style="width:85%" class="form-control" required autofocus placeholder="http://www.example.com"></td></tr>
+<td><input type="url" name="{{.url_name}}" style="width:85%" class="form-control" required autofocus placeholder="http://www.example.com"></td></tr>
 <tr>
 <th>proxy:</th>
 <td><input type="url" name="proxy" style="width:280px" class="form-control" placeholder="eg:http://uname:psw@10.0.2.2:3218">
@@ -19,4 +19,5 @@
 <td style="text-align:center"><input type="submit" value="test" class="btn btn-primary"></td>
 </tr>
 </table>
+<input type="hidden" name="token" value="{{.token}}">
 </form>

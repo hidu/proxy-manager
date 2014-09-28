@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -103,7 +104,12 @@ func (manager *ProxyManager) handel_about(w http.ResponseWriter, req *http.Reque
 }
 func (manager *ProxyManager) handel_test(w http.ResponseWriter, req *http.Request, values map[string]interface{}) {
 	do_post := func() {
-		urlStr := strings.TrimSpace(req.PostFormValue("url"))
+		token, err := strconv.ParseInt(req.PostFormValue("token"), 10, 64)
+		if err != nil {
+			w.Write([]byte("params wrong"))
+			return
+		}
+		urlStr := strings.TrimSpace(req.PostFormValue(fmt.Sprintf("url_%d", token-manager.startTime.UnixNano())))
 		obj, err := url.Parse(urlStr)
 		if err != nil || obj.Scheme != "http" {
 			w.Write([]byte("wrong url"))
@@ -135,8 +141,14 @@ func (manager *ProxyManager) handel_test(w http.ResponseWriter, req *http.Reques
 		}
 
 	}
+
 	switch req.Method {
 	case "GET":
+		nowInt := time.Now().UnixNano()
+		values["url_name"] = fmt.Sprintf("url_%d", nowInt)
+
+		values["token"] = fmt.Sprintf("%d", manager.startTime.UnixNano()+nowInt)
+
 		code := render_html("test.html", values, true)
 		w.Write([]byte(code))
 		return
