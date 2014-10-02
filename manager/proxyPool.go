@@ -199,6 +199,17 @@ func (pool *ProxyPool) removeProxyActive(proxy_url string) {
 	}
 }
 
+func (pool *ProxyPool) removeProxy(proxy_url string) {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+	if _, hasAct := pool.proxyListAll[proxy_url]; hasAct {
+		delete(pool.proxyListAll, proxy_url)
+	}
+	if _, hasAct := pool.proxyListActive[proxy_url]; hasAct {
+		delete(pool.proxyListActive, proxy_url)
+	}
+}
+
 var errorNoProxy error = fmt.Errorf("no active proxy")
 
 func (pool *ProxyPool) GetOneProxy(logid int64) (*Proxy, error) {
@@ -261,7 +272,9 @@ func (pool *ProxyPool) runTest() {
 
 	used := time.Now().Sub(start)
 	log.Println("test all proxy finish,total:", proxyTotal, "used:", used, "activeTotal:", len(pool.proxyListActive))
-
+	
+	pool.cleanBadProxy(86400)
+	
 	testResultFile := pool.ProxyManager.config.confDir + "/pool_checked.conf"
 	utils.File_put_contents(testResultFile, []byte(pool.String()))
 }
@@ -351,4 +364,19 @@ func doRequestGet(urlStr string, proxy *Proxy, timeout_sec int) (resp *http.Resp
 	}
 	req, _ := http.NewRequest("GET", urlStr, nil)
 	return client.Do(req)
+}
+
+func (pool *ProxyPool)cleanBadProxy(sec int64){
+	last:=time.Now().Unix()-sec
+	proxyBad:=make([]*Proxy,0)
+	for _,proxy:= range pool.proxyListAll {
+		if proxy.LastCheckOk<last{
+			proxyBad=append(proxyBad,proxy)
+		}
+	}
+	
+	for _,proxy:=range proxyBad{
+		pool.removeProxy(proxy.proxy)
+		utils.File_put_contents(pool.ProxyManager.config.confDir+"/pool_bad.list", []byte(proxy.String()+"\n"),utils.FILE_APPEND)
+	}
 }
