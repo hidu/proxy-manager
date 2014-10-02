@@ -8,6 +8,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"net"
 	"time"
 )
 
@@ -71,6 +72,14 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 		dump, _ := httputil.DumpRequest(req, true)
 		log.Println("req dump:\n", string(dump))
 	}
+
+	if !httpClient.ProxyManager.checkHttpAuth(user) {
+		rlog.addLog("auth", "failed")
+		w.Write([]byte("auth failed"))
+		w.WriteHeader(http.StatusNonAuthoritativeInfo)
+		return
+	}
+
 	req.RequestURI = ""
 	req.Header.Del("Connection")
 	req.Header.Del("Proxy-Connection")
@@ -95,7 +104,13 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 			return proxy.URL, nil
 		}
 
-		client.Transport = &http.Transport{Proxy: proxyGetFn}
+		client.Transport = &http.Transport{
+			Proxy: proxyGetFn,
+			Dial:(&net.Dialer{
+				Timeout:   time.Duration(httpClient.ProxyManager.config.timeout) * time.Second,
+				KeepAlive: 0 * time.Second,
+			}).Dial,
+		}
 		resp, err = client.Do(req)
 		if err == nil {
 			httpClient.ProxyManager.proxyPool.MarkProxyStatus(proxy, PROXY_USED_SUC)

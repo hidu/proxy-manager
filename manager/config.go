@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type Config struct {
@@ -18,7 +19,14 @@ type Config struct {
 	re_try        int
 	aliveCheckUrl string
 	checkInterval int64
+	authType      int
 }
+
+const (
+	AuthType_NO            = 0
+	AuthType_Basic         = 1
+	AuthType_Basic_WithAny = 2
+)
 
 func LoadConfig(configPath string) *Config {
 	config := &Config{}
@@ -52,6 +60,15 @@ func LoadConfig(configPath string) *Config {
 	config.checkInterval = gconf.MustInt64(goconfig.DEFAULT_SECTION, "check_interval", 3600)
 	if config.checkInterval <= 60 {
 		config.checkInterval = 1800
+	}
+
+	_authType := strings.ToLower(gconf.MustValue(goconfig.DEFAULT_SECTION, "authType", "none"))
+	authTypes := map[string]int{"none": 0, "basic": 1, "basic_any": 2}
+
+	if authType, has := authTypes[_authType]; has {
+		config.authType = authType
+	} else {
+		log.Println("conf error,unknow value authType:", _authType)
 	}
 
 	config.re_try = gconf.MustInt(goconfig.DEFAULT_SECTION, "re_try", 0)

@@ -141,11 +141,12 @@ func (pool *ProxyPool) parseProxy(info map[string]string) *Proxy {
 		return nil
 	}
 	intValues := make(map[string]int)
-	intFields := []string{"weight", "status", "check_used", "last_check"}
+	intFields := []string{"weight", "status", "check_used", "last_check", "last_check_ok"}
 	var err error
 	for _, fieldName := range intFields {
 		intValues[fieldName], err = strconv.Atoi(info[fieldName])
 		if err != nil {
+			log.Println("parse [", fieldName, "]failed,not int.err:", err)
 			intValues[fieldName] = 0
 		}
 	}
@@ -153,7 +154,7 @@ func (pool *ProxyPool) parseProxy(info map[string]string) *Proxy {
 	proxy.StatusCode = PROXY_STATUS(intValues["status"])
 	proxy.CheckUsed = int64(intValues["check_used"])
 	proxy.LastCheck = int64(intValues["last_check"])
-
+	proxy.LastCheckOk = int64(intValues["last_check_ok"])
 	return proxy
 }
 
@@ -285,7 +286,8 @@ func (pool *ProxyPool) TestProxy(proxy *Proxy) bool {
 	defer (func() {
 		<-pool.checkChan
 	})()
-	if start.Unix()-proxy.LastCheck < pool.checkInterval/2 {
+
+	if start.Unix()-proxy.LastCheck < pool.checkInterval {
 		return proxy.IsOk()
 	}
 
@@ -326,6 +328,7 @@ func (pool *ProxyPool) TestProxy(proxy *Proxy) bool {
 		conn.Close()
 	}
 	proxy.StatusCode = PROXY_STATUS_ACTIVE
+	proxy.LastCheckOk = proxy.LastCheck
 	testlog("pass")
 	return true
 }

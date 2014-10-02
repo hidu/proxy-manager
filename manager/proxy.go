@@ -44,14 +44,15 @@ func (status PROXY_USED_STATUS) String() string {
 }
 
 type Proxy struct {
-	proxy      string
-	URL        *url.URL
-	Weight     int
-	StatusCode PROXY_STATUS
-	CheckUsed  int64 //ms
-	LastCheck  int64
-	Used       int64
-	Count      *ProxyCount
+	proxy       string
+	URL         *url.URL
+	Weight      int
+	StatusCode  PROXY_STATUS
+	CheckUsed   int64 //ms
+	LastCheck   int64
+	LastCheckOk int64
+	Used        int64
+	Count       *ProxyCount
 }
 
 func NewProxy(proxyUrl string) *Proxy {
@@ -68,12 +69,13 @@ func NewProxy(proxyUrl string) *Proxy {
 }
 
 func (proxy *Proxy) String() string {
-	return fmt.Sprintf("proxy=%-40s\tweight=%d\tlast_check=%d\tcheck_used=%d\tstatus=%d",
+	return fmt.Sprintf("proxy=%-40s\tweight=%d\tlast_check=%d\tcheck_used=%d\tstatus=%d\tlast_check_ok=%d",
 		proxy.proxy,
 		proxy.Weight,
 		proxy.LastCheck,
 		proxy.CheckUsed,
 		proxy.StatusCode,
+		proxy.LastCheckOk,
 	)
 }
 

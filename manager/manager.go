@@ -19,6 +19,7 @@ type ProxyManager struct {
 	proxyPool  *ProxyPool
 	reqNum     int64
 	startTime  time.Time
+	users      map[string]*User
 }
 
 func NewProyManager(configPath string) *ProxyManager {
@@ -36,6 +37,8 @@ func NewProyManager(configPath string) *ProxyManager {
 	if manager.proxyPool == nil {
 		os.Exit(1)
 	}
+
+	manager.loadUsers()
 
 	manager.httpClient = NewHttpClient(manager)
 	return manager
@@ -68,5 +71,13 @@ func (manager *ProxyManager) ServeHTTP(w http.ResponseWriter, req *http.Request)
 		manager.serveLocalRequest(w, req)
 	} else {
 		manager.httpClient.ServeHTTP(w, req)
+	}
+}
+
+func (manager *ProxyManager) loadUsers() {
+	var err error
+	manager.users, err = loadUsers(manager.config.confDir + "/users")
+	if err != nil {
+		log.Println("loadUsers err:", err)
 	}
 }
