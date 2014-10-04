@@ -34,8 +34,6 @@ func (manager *ProxyManager) serveLocalRequest(w http.ResponseWriter, req *http.
 	values["port"] = fmt.Sprintf("%d", manager.config.port)
 	values["config"] = manager.config
 
-	values["proxyTotal"] = len(manager.proxyPool.proxyListActive)
-	values["proxyAllNum"] = len(manager.proxyPool.proxyListAll)
 	values["proxyReqTotal"] = manager.proxyPool.Count.total
 
 	_host, _port, _ := utils.Net_getHostPortFromReq(req)
@@ -60,6 +58,7 @@ func (manager *ProxyManager) serveLocalRequest(w http.ResponseWriter, req *http.
 func (manager *ProxyManager) handel_index(w http.ResponseWriter, req *http.Request, values map[string]interface{}) {
 	values["proxy_count_suc"] = manager.proxyPool.Count.success
 	values["proxy_count_failed"] = manager.proxyPool.Count.failed
+	values["proxy_count"] = manager.proxyPool.GetProxyNums()
 	code := render_html("index.html", values, true)
 	w.Write([]byte(code))
 }
@@ -112,15 +111,15 @@ func (manager *ProxyManager) handel_test(w http.ResponseWriter, req *http.Reques
 		urlStr := strings.TrimSpace(req.PostFormValue(fmt.Sprintf("url_%d", token-manager.startTime.UnixNano())))
 		obj, err := url.Parse(urlStr)
 		if err != nil || obj.Scheme != "http" {
-			w.Write([]byte("wrong url"))
+			w.Write([]byte(fmt.Sprintf("wrong url [%s],err:%v", urlStr, err)))
 			return
 		}
 		proxyStr := strings.TrimSpace(req.PostFormValue("proxy"))
 
 		if proxyStr != "" {
 			proxyObj, err := url.Parse(proxyStr)
-			if err != nil || proxyObj.Scheme != "http" {
-				w.Write([]byte("wrong proxy info"))
+			if err != nil || (proxyObj.Scheme != "http" && proxyObj.Scheme != "socks5") {
+				w.Write([]byte(fmt.Sprintf("wrong proxy info [%s],err:%v", proxyStr, err)))
 				return
 			}
 			proxy := NewProxy(proxyStr)

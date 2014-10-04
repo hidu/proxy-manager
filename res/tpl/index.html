@@ -6,8 +6,12 @@
 <table style="width:100%" class="tb_1">
 <caption>status</caption>
   <tr><th width="150px">server start</th> <td>{{.startTime}}</td></tr>
-  <tr><th>proxy active</th> <td>{{.proxyTotal}}</td></tr>
-  <tr><th>proxy total</th> <td>{{.proxyAllNum}}</td></tr>
+  <tr><th>proxy active</th> <td>{{.proxy_count.active}}&nbsp;&nbsp;
+          <font color=gray>(http:{{.proxy_count.active_http}}&nbsp;
+           socks5:{{.proxy_count.active_socks5}})</font>
+         </td>
+  </tr>
+  <tr><th>proxy total</th> <td>{{.proxy_count.total}}</td></tr>
   <tr><th>request total</th> <td>{{.proxyReqTotal}}</td></tr>
   <tr><th>request suc</th> <td>{{.proxy_count_suc}}</td></tr>
   <tr><th>request failed</th> <td>{{.proxy_count_failed}}</td></tr>

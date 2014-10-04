@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"code.google.com/p/go.net/proxy"
 	"fmt"
 	"io"
 	"log"
@@ -8,7 +9,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
-	"net"
 	"time"
 )
 
@@ -87,7 +87,7 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 	var resp *http.Response
 	var err error
 
-	client := &http.Client{}
+	//	client := &http.Client{}
 	max_re_try := httpClient.ProxyManager.config.re_try + 1
 	no := 0
 	for ; no < max_re_try; no++ {
@@ -100,16 +100,21 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 		}
 		rlog.addLog("proxy", proxy.proxy)
 		rlog.addLog("proxyUsed", proxy.Used)
-		proxyGetFn := func(req *http.Request) (*url.URL, error) {
-			return proxy.URL, nil
-		}
-
-		client.Transport = &http.Transport{
-			Proxy: proxyGetFn,
-			Dial:(&net.Dialer{
-				Timeout:   time.Duration(httpClient.ProxyManager.config.timeout) * time.Second,
-				KeepAlive: 0 * time.Second,
-			}).Dial,
+		//		proxyGetFn := func(req *http.Request) (*url.URL, error) {
+		//			return proxy.URL, nil
+		//		}
+		//
+		//		client.Transport = &http.Transport{
+		//			Proxy: proxyGetFn,
+		//			Dial:(&net.Dialer{
+		//				Timeout:   time.Duration(httpClient.ProxyManager.config.timeout) * time.Second,
+		//				KeepAlive: 0 * time.Second,
+		//			}).Dial,
+		//		}
+		client, err := NewClient(proxy.URL, httpClient.ProxyManager.config.timeout)
+		if err != nil {
+			rlog.addLog("get http client failed", err)
+			continue
 		}
 		resp, err = client.Do(req)
 		if err == nil {
@@ -166,4 +171,28 @@ func copyHeaders(dst, src http.Header) {
 			dst.Add(k, v)
 		}
 	}
+}
+
+func NewClient(proxyURL *url.URL, timeout int) (*http.Client, error) {
+	client := &http.Client{}
+	client.Timeout = time.Duration(timeout) * time.Second
+
+	if proxyURL.Scheme == "http" {
+		client.Transport = &http.Transport{
+			Proxy: func(req *http.Request) (*url.URL, error) {
+				return proxyURL, nil
+			},
+		}
+		return client, nil
+	} else if proxyURL.Scheme == "socks5" {
+		ph, err := proxy.FromURL(proxyURL, proxy.Direct)
+		if err != nil {
+			return nil, err
+		}
+		client.Transport = &http.Transport{
+			Dial: ph.Dial,
+		}
+		return client, nil
+	}
+	return nil, fmt.Errorf("unknow proxy scheme:%s", proxyURL.Scheme)
 }

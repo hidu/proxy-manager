@@ -7,7 +7,6 @@ import (
 	//	"math/rand"
 	"net"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -118,6 +117,7 @@ func (pool *ProxyPool) loadProxysFromTxtFile(txtFile *utils.TxtFile) (map[string
 	defaultValues["status"] = "1"
 	defaultValues["last_check"] = "0"
 	defaultValues["check_used"] = "0"
+	defaultValues["last_check_ok"] = "0"
 
 	datas, err := txtFile.KvMapSlice("=", true, defaultValues)
 	if err != nil {
@@ -272,9 +272,9 @@ func (pool *ProxyPool) runTest() {
 
 	used := time.Now().Sub(start)
 	log.Println("test all proxy finish,total:", proxyTotal, "used:", used, "activeTotal:", len(pool.proxyListActive))
-	
+
 	pool.cleanBadProxy(86400)
-	
+
 	testResultFile := pool.ProxyManager.config.confDir + "/pool_checked.conf"
 	utils.File_put_contents(testResultFile, []byte(pool.String()))
 }
@@ -341,7 +341,7 @@ func (pool *ProxyPool) TestProxy(proxy *Proxy) bool {
 		conn.Close()
 	}
 	proxy.StatusCode = PROXY_STATUS_ACTIVE
-	proxy.LastCheckOk = proxy.LastCheck
+	proxy.LastCheckOk = time.Now().Unix()
 	testlog("pass")
 	return true
 }
@@ -351,32 +351,50 @@ func (pool *ProxyPool) MarkProxyStatus(proxy *Proxy, status PROXY_USED_STATUS) {
 	pool.Count.MarkStatus(status)
 }
 
+func (pool *ProxyPool) GetProxyNums() map[string]int {
+	data := make(map[string]int)
+	data["total"] = len(pool.proxyListAll)
+	data["active"] = len(pool.proxyListActive)
+	data["active_http"] = 0
+	data["active_socks5"] = 0
+
+	for _, proxy := range pool.proxyListActive {
+		switch proxy.URL.Scheme {
+		case "http":
+			data["active_http"]++
+		case "socks5":
+			data["active_socks5"]++
+		}
+	}
+	return data
+}
+
 func doRequestGet(urlStr string, proxy *Proxy, timeout_sec int) (resp *http.Response, err error) {
 	client := &http.Client{}
+	if proxy != nil {
+		client, err = NewClient(proxy.URL, timeout_sec)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if timeout_sec > 0 {
 		client.Timeout = time.Duration(timeout_sec) * time.Second
-	}
-	if proxy != nil {
-		proxyGetFn := func(req *http.Request) (*url.URL, error) {
-			return proxy.URL, nil
-		}
-		client.Transport = &http.Transport{Proxy: proxyGetFn}
 	}
 	req, _ := http.NewRequest("GET", urlStr, nil)
 	return client.Do(req)
 }
 
-func (pool *ProxyPool)cleanBadProxy(sec int64){
-	last:=time.Now().Unix()-sec
-	proxyBad:=make([]*Proxy,0)
-	for _,proxy:= range pool.proxyListAll {
-		if proxy.LastCheckOk<last{
-			proxyBad=append(proxyBad,proxy)
+func (pool *ProxyPool) cleanBadProxy(sec int64) {
+	last := time.Now().Unix() - sec
+	proxyBad := make([]*Proxy, 0)
+	for _, proxy := range pool.proxyListAll {
+		if proxy.LastCheckOk < last {
+			proxyBad = append(proxyBad, proxy)
 		}
 	}
-	
-	for _,proxy:=range proxyBad{
+
+	for _, proxy := range proxyBad {
 		pool.removeProxy(proxy.proxy)
-		utils.File_put_contents(pool.ProxyManager.config.confDir+"/pool_bad.list", []byte(proxy.String()+"\n"),utils.FILE_APPEND)
+		utils.File_put_contents(pool.ProxyManager.config.confDir+"/pool_bad.list", []byte(proxy.String()+"\n"), utils.FILE_APPEND)
 	}
 }
