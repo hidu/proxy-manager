@@ -39,6 +39,10 @@ func NewProyManager(configPath string) *ProxyManager {
 	}
 
 	manager.loadUsers()
+	
+	utils.SetInterval(func(){
+		manager.loadUsers()
+	},300)
 
 	manager.httpClient = NewHttpClient(manager)
 	return manager
@@ -79,5 +83,8 @@ func (manager *ProxyManager) loadUsers() {
 	manager.users, err = loadUsers(manager.config.confDir + "/users")
 	if err != nil {
 		log.Println("loadUsers err:", err)
+	}else{
+		log.Println("loadUsers suc,total:",len(manager.users))
 	}
+	
 }
