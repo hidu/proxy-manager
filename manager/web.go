@@ -117,8 +117,8 @@ func (manager *ProxyManager) handel_test(w http.ResponseWriter, req *http.Reques
 		proxyStr := strings.TrimSpace(req.PostFormValue("proxy"))
 
 		if proxyStr != "" {
-			proxyObj, err := url.Parse(proxyStr)
-			if err != nil || (proxyObj.Scheme != "http" && proxyObj.Scheme != "socks5") {
+			_, err := url.Parse(proxyStr)
+			if err != nil {
 				w.Write([]byte(fmt.Sprintf("wrong proxy info [%s],err:%v", proxyStr, err)))
 				return
 			}
@@ -126,7 +126,7 @@ func (manager *ProxyManager) handel_test(w http.ResponseWriter, req *http.Reques
 			resp, err := doRequestGet(urlStr, proxy, 5)
 			if err != nil {
 				w.WriteHeader(502)
-				w.Write([]byte(fmt.Sprintf("can not get %s via %s", urlStr, proxyStr)))
+				w.Write([]byte(fmt.Sprintf("can not get [%s] via [%s]\nerr:%s", urlStr, proxyStr, err)))
 				return
 			}
 			copyHeaders(w.Header(), resp.Header)

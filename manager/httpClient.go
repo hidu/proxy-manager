@@ -1,13 +1,11 @@
 package manager
 
 import (
-	"code.google.com/p/go.net/proxy"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/http/httputil"
-	"net/url"
 	"strings"
 	"time"
 )
@@ -159,28 +157,4 @@ func copyHeaders(dst, src http.Header) {
 			dst.Add(k, v)
 		}
 	}
-}
-
-func NewClient(proxyURL *url.URL, timeout int) (*http.Client, error) {
-	client := &http.Client{}
-	client.Timeout = time.Duration(timeout) * time.Second
-
-	if proxyURL.Scheme == "http" {
-		client.Transport = &http.Transport{
-			Proxy: func(req *http.Request) (*url.URL, error) {
-				return proxyURL, nil
-			},
-		}
-		return client, nil
-	} else if proxyURL.Scheme == "socks5" {
-		ph, err := proxy.FromURL(proxyURL, proxy.Direct)
-		if err != nil {
-			return nil, err
-		}
-		client.Transport = &http.Transport{
-			Dial: ph.Dial,
-		}
-		return client, nil
-	}
-	return nil, fmt.Errorf("unknow proxy scheme:%s", proxyURL.Scheme)
 }

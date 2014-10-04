@@ -55,7 +55,7 @@ func LoadProxyPool(manager *ProxyManager) *ProxyPool {
 	if pool.aliveCheckUrl != "" {
 		var err error
 		urlStr := strings.Replace(pool.aliveCheckUrl, "{%rand}", fmt.Sprintf("%d", time.Now().UnixNano()), -1)
-		pool.aliveCheckResponse, err = doRequestGet(urlStr, nil, 3)
+		pool.aliveCheckResponse, err = doRequestGet(urlStr, nil, pool.timeout)
 		if err != nil {
 			log.Println("get origin alive response failed,url:", pool.aliveCheckUrl, "err:", err)
 			return nil
@@ -321,7 +321,7 @@ func (pool *ProxyPool) TestProxy(proxy *Proxy) bool {
 
 	if pool.aliveCheckUrl != "" {
 		urlStr := strings.Replace(pool.aliveCheckUrl, "{%rand}", fmt.Sprintf("%d", start.UnixNano()), -1)
-		resp, err := doRequestGet(urlStr, proxy, pool.timeout/2)
+		resp, err := doRequestGet(urlStr, proxy, pool.timeout)
 		if err != nil {
 			testlog("failed,", err.Error())
 			return false
@@ -363,6 +363,8 @@ func (pool *ProxyPool) GetProxyNums() map[string]int {
 	data["active"] = len(pool.proxyListActive)
 	data["active_http"] = 0
 	data["active_socks5"] = 0
+	data["active_socks4"] = 0
+	data["active_socks4a"] = 0
 
 	for _, proxy := range pool.proxyListActive {
 		switch proxy.URL.Scheme {
@@ -370,6 +372,10 @@ func (pool *ProxyPool) GetProxyNums() map[string]int {
 			data["active_http"]++
 		case "socks5":
 			data["active_socks5"]++
+		case "socks4":
+			data["active_socks4"]++
+		case "socks4a":
+			data["active_socks4a"]++
 		}
 	}
 	return data
