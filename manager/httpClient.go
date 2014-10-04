@@ -87,12 +87,11 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 	var resp *http.Response
 	var err error
 
-	//	client := &http.Client{}
 	max_re_try := httpClient.ProxyManager.config.re_try + 1
 	no := 0
 	for ; no < max_re_try; no++ {
 		rlog.addLog("try_no", no)
-		proxy, err := httpClient.ProxyManager.proxyPool.GetOneProxy(rlog.logId)
+		proxy, err := httpClient.ProxyManager.proxyPool.GetOneProxy(user.Name, rlog.logId)
 		if err != nil {
 			rlog.addLog("get_proxy_faield", err)
 			rlog.print()
@@ -100,17 +99,6 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 		}
 		rlog.addLog("proxy", proxy.proxy)
 		rlog.addLog("proxyUsed", proxy.Used)
-		//		proxyGetFn := func(req *http.Request) (*url.URL, error) {
-		//			return proxy.URL, nil
-		//		}
-		//
-		//		client.Transport = &http.Transport{
-		//			Proxy: proxyGetFn,
-		//			Dial:(&net.Dialer{
-		//				Timeout:   time.Duration(httpClient.ProxyManager.config.timeout) * time.Second,
-		//				KeepAlive: 0 * time.Second,
-		//			}).Dial,
-		//		}
 		client, err := NewClient(proxy.URL, httpClient.ProxyManager.config.timeout)
 		if err != nil {
 			rlog.addLog("get http client failed", err)

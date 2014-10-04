@@ -29,7 +29,7 @@ type ProxyPool struct {
 	timeout       int
 	checkInterval int64
 
-	proxyActiveUsed map[string]string
+	proxyUsed map[string]map[string]string
 
 	Count *ProxyCount
 }
@@ -42,7 +42,7 @@ func LoadProxyPool(manager *ProxyManager) *ProxyPool {
 	pool.proxyListAll = make(map[string]*Proxy)
 	pool.SessionProxys = make(map[int64]map[string]*Proxy)
 
-	pool.proxyActiveUsed = make(map[string]string)
+	pool.proxyUsed = make(map[string]map[string]string)
 
 	pool.checkChan = make(chan string, 100)
 	pool.testRunChan = make(chan bool, 1)
@@ -212,7 +212,7 @@ func (pool *ProxyPool) removeProxy(proxy_url string) {
 
 var errorNoProxy error = fmt.Errorf("no active proxy")
 
-func (pool *ProxyPool) GetOneProxy(logid int64) (*Proxy, error) {
+func (pool *ProxyPool) GetOneProxy(uname string, logid int64) (*Proxy, error) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 	l := len(pool.proxyListActive)
@@ -227,16 +227,22 @@ func (pool *ProxyPool) GetOneProxy(logid int64) (*Proxy, error) {
 		pool.SessionProxys[logid] = sessionProxys
 	}
 
+	userUsed, has := pool.proxyUsed[uname]
+	if !has {
+		userUsed = make(map[string]string)
+	}
+	pool.proxyUsed[uname] = userUsed
+
 	for _, proxy := range pool.proxyListActive {
-		if _, has := pool.proxyActiveUsed[proxy.proxy]; has {
+		if _, has := userUsed[proxy.proxy]; has {
 			continue
 		}
 		if _, has := sessionProxys[proxy.proxy]; !has {
 			sessionProxys[proxy.proxy] = proxy
 			proxy.Used++
-			pool.proxyActiveUsed[proxy.proxy] = "1"
-			if len(pool.proxyActiveUsed) >= len(pool.proxyListActive) {
-				pool.proxyActiveUsed = make(map[string]string)
+			userUsed[proxy.proxy] = "1"
+			if len(userUsed) >= len(pool.proxyListActive) {
+				userUsed = make(map[string]string)
 			}
 			return proxy, nil
 		}
