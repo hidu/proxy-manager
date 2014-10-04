@@ -55,3 +55,33 @@
 </tr>
 </table>
 
+<script>
+var x_man_no=1;
+</script>
+
+{{if .isAdmin}}
+<table class="tb_1">
+<thead>
+  <tr>
+  <th width="80px">no</th>
+  <th>proxy</th>
+  <th width="80px">used</th>
+  <th width="150px" nowrap="nowrap">LastCheck</th>
+  <th width="100px" nowrap="nowrap" title="ms">checkUsed</th>
+  <th width="100px">suc</th>
+  <th width="100px">failed</th>
+  </tr>
+</thead>
+	{{range $name,$proxy:=.proxys}}
+	 <tr>
+	 <td class="t_c"><script>document.write(x_man_no++)</script></td>
+	 <td>{{$name}}</td>
+	 <td class="t_c">{{$proxy.Used}}</td>
+	 <td class="t_c">{{$proxy.LastCheck|shortTime}}</td>
+	 <td class="t_c">{{$proxy.CheckUsed}}</td>
+	 <td class="t_c">{{$proxy.Count.Success}}</td>
+	 <td class="t_c">{{$proxy.Count.Failed}}</td>
+	 </tr>
+	{{end}}
+</table>	
+{{end}}

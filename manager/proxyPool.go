@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/hidu/goutils"
 	"log"
-	//	"math/rand"
 	"net"
 	"net/http"
 	"strconv"
@@ -437,5 +436,6 @@ func (pool *ProxyPool) cleanProxyUsed() {
 
 	for _, name := range delNames {
 		delete(pool.proxyUsed, name)
+		log.Println("cleanProxyUsed name=", name)
 	}
 }

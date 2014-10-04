@@ -2,6 +2,7 @@ package manager
 
 import (
 	"encoding/base64"
+	"fmt"
 	"github.com/hidu/goutils"
 	"log"
 	"net/http"
@@ -16,6 +17,14 @@ type User struct {
 	PswMd5       string
 	IsAdmin      bool
 	SkipCheckPsw bool
+}
+
+func (user *User) pswEq(psw string) bool {
+	return user.PswMd5 == utils.StrMd5(psw)
+}
+
+func (user *User) PswEnc() string {
+	return utils.StrMd5(fmt.Sprintf("%s:%s", user.Name, user.PswMd5))
 }
 
 func getAuthorInfo(req *http.Request) *User {

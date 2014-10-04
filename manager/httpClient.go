@@ -41,7 +41,6 @@ func (rlog *requestLog) addLog(arg ...interface{}) {
 func (rlog *requestLog) reset() {
 	rlog.startTime = time.Now()
 	rlog.logData = []string{}
-	rlog.logData = []string{}
 }
 
 type HttpClient struct {
@@ -73,8 +72,9 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 
 	if !httpClient.ProxyManager.checkHttpAuth(user) {
 		rlog.addLog("auth", "failed")
+		w.Header().Set("Proxy-Authenticate", "Basic realm=auth need")
+		w.WriteHeader(407)
 		w.Write([]byte("auth failed"))
-		w.WriteHeader(http.StatusNonAuthoritativeInfo)
 		return
 	}
 
@@ -85,9 +85,10 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 	var resp *http.Response
 	var err error
 
-	max_re_try := httpClient.ProxyManager.config.re_try
+	max_re_try := httpClient.ProxyManager.config.re_try + 1
 	no := 1
 	for ; no <= max_re_try; no++ {
+		rlog.addLog("uname", user.Name)
 		rlog.addLog("try_no", no)
 		proxy, err := httpClient.ProxyManager.proxyPool.GetOneProxy(user.Name, rlog.logId)
 		if err != nil {
