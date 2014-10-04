@@ -85,9 +85,9 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 	var resp *http.Response
 	var err error
 
-	max_re_try := httpClient.ProxyManager.config.re_try + 1
-	no := 0
-	for ; no < max_re_try; no++ {
+	max_re_try := httpClient.ProxyManager.config.re_try
+	no := 1
+	for ; no <= max_re_try; no++ {
 		rlog.addLog("try_no", no)
 		proxy, err := httpClient.ProxyManager.proxyPool.GetOneProxy(user.Name, rlog.logId)
 		if err != nil {
@@ -109,15 +109,14 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 		} else {
 			httpClient.ProxyManager.proxyPool.MarkProxyStatus(proxy, PROXY_USED_FAILED)
 			rlog.addLog("failed")
-			if no == max_re_try-1 {
+			if no == max_re_try {
 				rlog.addLog("all failed")
 			}
 			rlog.print()
 		}
 	}
 
-	w.Header().Set("x-man-try", fmt.Sprintf("%d", no))
-	w.Header().Set("x-man-try-max", fmt.Sprintf("%d", max_re_try))
+	w.Header().Set("x-man-try", fmt.Sprintf("%d/%d", no, max_re_try))
 	w.Header().Set("x-man-id", fmt.Sprintf("%d", rlog.logId))
 
 	if err != nil || resp == nil {
@@ -146,9 +145,6 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 }
 
 func copyHeaders(dst, src http.Header) {
-	for k := range dst {
-		dst.Del(k)
-	}
 	for k, vs := range src {
 		if len(k) > 5 && k[:6] == "Proxy-" {
 			continue

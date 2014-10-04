@@ -29,7 +29,7 @@ type ProxyPool struct {
 	timeout       int
 	checkInterval int64
 
-	proxyUsed map[string]map[string]string
+	proxyUsed map[string]map[string]int64
 
 	Count *ProxyCount
 }
@@ -42,7 +42,7 @@ func LoadProxyPool(manager *ProxyManager) *ProxyPool {
 	pool.proxyListAll = make(map[string]*Proxy)
 	pool.SessionProxys = make(map[int64]map[string]*Proxy)
 
-	pool.proxyUsed = make(map[string]map[string]string)
+	pool.proxyUsed = make(map[string]map[string]int64)
 
 	pool.checkChan = make(chan string, 100)
 	pool.testRunChan = make(chan bool, 1)
@@ -85,6 +85,10 @@ func LoadProxyPool(manager *ProxyManager) *ProxyPool {
 	utils.SetInterval(func() {
 		pool.runTest()
 	}, pool.checkInterval)
+
+	utils.SetInterval(func() {
+		pool.cleanProxyUsed()
+	}, 1200)
 
 	return pool
 }
@@ -229,7 +233,7 @@ func (pool *ProxyPool) GetOneProxy(uname string, logid int64) (*Proxy, error) {
 
 	userUsed, has := pool.proxyUsed[uname]
 	if !has {
-		userUsed = make(map[string]string)
+		userUsed = make(map[string]int64)
 	}
 	pool.proxyUsed[uname] = userUsed
 
@@ -240,9 +244,9 @@ func (pool *ProxyPool) GetOneProxy(uname string, logid int64) (*Proxy, error) {
 		if _, has := sessionProxys[proxy.proxy]; !has {
 			sessionProxys[proxy.proxy] = proxy
 			proxy.Used++
-			userUsed[proxy.proxy] = "1"
+			userUsed[proxy.proxy] = time.Now().Unix()
 			if len(userUsed) >= len(pool.proxyListActive) {
-				userUsed = make(map[string]string)
+				userUsed = make(map[string]int64)
 			}
 			return proxy, nil
 		}
@@ -408,5 +412,30 @@ func (pool *ProxyPool) cleanBadProxy(sec int64) {
 	for _, proxy := range proxyBad {
 		pool.removeProxy(proxy.proxy)
 		utils.File_put_contents(pool.ProxyManager.config.confDir+"/pool_bad.list", []byte(proxy.String()+"\n"), utils.FILE_APPEND)
+	}
+}
+
+func (pool *ProxyPool) cleanProxyUsed() {
+	pool.mu.Lock()
+	defer pool.mu.Unlock()
+	now := time.Now().Unix()
+	delNames := []string{}
+	for name, infos := range pool.proxyUsed {
+		delKeys := []string{}
+		for k, v := range infos {
+			if now-v > 1200 {
+				delKeys = append(delKeys, k)
+			}
+		}
+		for _, k := range delKeys {
+			delete(infos, k)
+		}
+		if len(infos) == 0 {
+			delNames = append(delNames, name)
+		}
+	}
+
+	for _, name := range delNames {
+		delete(pool.proxyUsed, name)
 	}
 }
