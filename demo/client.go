@@ -21,6 +21,7 @@ func main() {
 			},
 		},
 	}
+
 	resp, err := client.Get(*target)
 	fmt.Println("err:", err)
 	dump, _ := httputil.DumpResponse(resp, *dumpBody)

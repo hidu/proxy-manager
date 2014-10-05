@@ -215,7 +215,7 @@ func (pool *ProxyPool) removeProxy(proxy_url string) {
 
 var errorNoProxy error = fmt.Errorf("no active proxy")
 
-func (pool *ProxyPool) GetOneProxy(uname string, logid int64) (*Proxy, error) {
+func (pool *ProxyPool) GetOneProxy(uname string) (*Proxy, error) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 	l := len(pool.proxyListActive)
@@ -223,15 +223,8 @@ func (pool *ProxyPool) GetOneProxy(uname string, logid int64) (*Proxy, error) {
 		return nil, errorNoProxy
 	}
 
-	sessionProxys, has := pool.SessionProxys[logid]
-
-	if !has {
-		sessionProxys = make(map[string]*Proxy)
-		pool.SessionProxys[logid] = sessionProxys
-	}
-
 	userUsed, has := pool.proxyUsed[uname]
-	if !has {
+	if !has || len(userUsed) >= len(pool.proxyListActive) {
 		userUsed = make(map[string]int64)
 	}
 	pool.proxyUsed[uname] = userUsed
@@ -240,26 +233,13 @@ func (pool *ProxyPool) GetOneProxy(uname string, logid int64) (*Proxy, error) {
 		if _, has := userUsed[proxy.proxy]; has {
 			continue
 		}
-		if _, has := sessionProxys[proxy.proxy]; !has {
-			sessionProxys[proxy.proxy] = proxy
-			proxy.Used++
-			userUsed[proxy.proxy] = time.Now().Unix()
-			if len(userUsed) >= len(pool.proxyListActive) {
-				userUsed = make(map[string]int64)
-			}
-			return proxy, nil
-		}
+		proxy.Used++
+		userUsed[proxy.proxy] = time.Now().Unix()
+		return proxy, nil
 	}
 	return nil, errorNoProxy
 }
 
-func (pool *ProxyPool) CleanSessionProxy(logid int64) {
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
-	if _, has := pool.SessionProxys[logid]; has {
-		delete(pool.SessionProxys, logid)
-	}
-}
 func (pool *ProxyPool) runTest() {
 	pool.testRunChan <- true
 	defer (func() {

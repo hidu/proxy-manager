@@ -76,11 +76,11 @@ var x_man_no=1;
 	 <tr>
 	 <td class="t_c"><script>document.write(x_man_no++)</script></td>
 	 <td>{{$name}}</td>
-	 <td class="t_c">{{$proxy.Used}}</td>
+	 <td class="t_c">{{$proxy.Used|myNum}}</td>
 	 <td class="t_c">{{$proxy.LastCheck|shortTime}}</td>
 	 <td class="t_c">{{$proxy.CheckUsed}}</td>
-	 <td class="t_c">{{$proxy.Count.Success}}</td>
-	 <td class="t_c">{{$proxy.Count.Failed}}</td>
+	 <td class="t_c">{{$proxy.Count.Success|myNum}}</td>
+	 <td class="t_c">{{$proxy.Count.Failed|myNum}}</td>
 	 </tr>
 	{{end}}
 </table>	

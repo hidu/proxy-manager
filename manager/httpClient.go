@@ -60,7 +60,6 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 
 	rlog.logId = httpClient.ProxyManager.reqNum + time.Now().Unix()
 
-	defer httpClient.ProxyManager.proxyPool.CleanSessionProxy(rlog.logId)
 	defer rlog.print()
 	user := getAuthorInfo(req)
 	rlog.addLog("uname", user.Name)
@@ -90,7 +89,7 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 	for ; no <= max_re_try; no++ {
 		rlog.addLog("uname", user.Name)
 		rlog.addLog("try_no", no)
-		proxy, err := httpClient.ProxyManager.proxyPool.GetOneProxy(user.Name, rlog.logId)
+		proxy, err := httpClient.ProxyManager.proxyPool.GetOneProxy(user.Name)
 		if err != nil {
 			rlog.addLog("get_proxy_faield", err)
 			rlog.print()

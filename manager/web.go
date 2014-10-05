@@ -252,10 +252,21 @@ func (manager *ProxyManager) handel_checkLogin(req *http.Request) (user *User, i
 
 func render_html(fileName string, values map[string]interface{}, layout bool) string {
 	html := utils.DefaultResource.Load("/res/tpl/" + fileName)
-	tpl, _ := template.New("page").Funcs(template.FuncMap{"shortTime": func(tu int64) string {
-		t := time.Unix(tu, 0)
-		return t.Format(TIME_FORMAT_STD)
-	}}).Parse(string(html))
+	myfn := template.FuncMap{
+		"shortTime": func(tu int64) string {
+			t := time.Unix(tu, 0)
+			return t.Format(TIME_FORMAT_STD)
+		},
+		"myNum": func(n int64) string {
+			if n == 0 {
+				return ""
+			} else {
+				return fmt.Sprintf("%d", n)
+			}
+		},
+	}
+
+	tpl, _ := template.New("page").Funcs(myfn).Parse(string(html))
 
 	var bf []byte
 	w := bytes.NewBuffer(bf)
