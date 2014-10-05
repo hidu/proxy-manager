@@ -12,6 +12,8 @@ download binary here(linux_x86_64 and windows_32): <http://pan.baidu.com/s/1c0dA
 
 proxy-manager provide http proxy with many proxies backend  
 
+```
+
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++  
 + client (want visit http://www.baidu.com/)              +  
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++  
@@ -32,3 +34,5 @@ proxy-manager provide http proxy with many proxies backend
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++  
 +        site:www.baidu.com                             +  
 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++  
+
+```
