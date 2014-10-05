@@ -1,9 +1,10 @@
 proxy-manager
 ============
 
-manager http proxy  
+manager http、socks4、socks4a、socks5 proxy
 
-conf/proxy.conf  main conf
+auto check proxy alive  
 
-conf/pool.conf   proxy pool conf
 
+
+download binary here(linux_x86_64 and windows_32): <http://pan.baidu.com/s/1qW0mYmC>  
