@@ -11,6 +11,7 @@ import (
 )
 
 type requestLog struct {
+	data      []string
 	logData   []string
 	startTime time.Time
 	req       *http.Request
@@ -30,11 +31,15 @@ func (rlog *requestLog) print() {
 	used := time.Now().Sub(rlog.startTime)
 	log.Println("logid:", rlog.logId,
 		rlog.req.Method, rlog.req.URL.String(),
+		strings.Join(rlog.data, " "),
 		strings.Join(rlog.logData, " "),
 		"used:", used.String())
 	rlog.reset()
 }
 
+func (rlog *requestLog) setLog(arg ...interface{}) {
+	rlog.data = append(rlog.logData, fmt.Sprint(arg))
+}
 func (rlog *requestLog) addLog(arg ...interface{}) {
 	rlog.logData = append(rlog.logData, fmt.Sprint(arg))
 }
@@ -62,7 +67,7 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 
 	defer rlog.print()
 	user := getAuthorInfo(req)
-	rlog.addLog("uname", user.Name)
+	rlog.setLog("uname", user.Name)
 
 	if PROXY_DEBUG {
 		dump, _ := httputil.DumpRequest(req, true)
@@ -81,14 +86,36 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 	req.Header.Del("Connection")
 	req.Header.Del("Proxy-Connection")
 
+	_statusOk := strings.Split(req.Header.Get("X-Man-Status-Ok"), ",")
+	statusOk := make(map[int]int)
+	for _, v := range _statusOk {
+		_code := int(getInt64(v))
+		if _code > 0 {
+			statusOk[_code] = 1
+		}
+	}
+	_clientReTry := -1
+	x_man_retry := req.Header.Get("X-Man-ReTry")
+	if x_man_retry != "" {
+		_clientReTry = int(getInt64(x_man_retry))
+	}
+
+	for k := range req.Header {
+		if strings.HasPrefix(strings.ToLower(k), "x-man") {
+			req.Header.Del(k)
+		}
+	}
+
 	var resp *http.Response
 	var err error
 
-	max_re_try := httpClient.ProxyManager.config.re_try + 1
+	max_re_try := httpClient.ProxyManager.config.reTry + 1
+	if _clientReTry >= 0 && _clientReTry <= httpClient.ProxyManager.config.reTryMax {
+		max_re_try = _clientReTry + 1
+	}
 	no := 1
 	for ; no <= max_re_try; no++ {
-		rlog.addLog("uname", user.Name)
-		rlog.addLog("try_no", no)
+		rlog.addLog("try", fmt.Sprintf("%d/%d", no, max_re_try))
 		proxy, err := httpClient.ProxyManager.proxyPool.GetOneProxy(user.Name)
 		if err != nil {
 			rlog.addLog("get_proxy_faield", err)
@@ -104,9 +131,20 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 		}
 		resp, err = client.Do(req)
 		if err == nil {
+			if len(statusOk) != 0 {
+				if _, has := statusOk[resp.StatusCode]; !has {
+					rlog.addLog("statusCode wrong", resp.StatusCode)
+					goto failed
+				}
+			}
 			httpClient.ProxyManager.proxyPool.MarkProxyStatus(proxy, PROXY_USED_SUC)
 			break
 		} else {
+			rlog.addLog("resErr", err.Error())
+		}
+
+	failed:
+		{
 			httpClient.ProxyManager.proxyPool.MarkProxyStatus(proxy, PROXY_USED_FAILED)
 			rlog.addLog("failed")
 			if no == max_re_try {
@@ -136,8 +174,10 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 	n, err := io.Copy(w, resp.Body)
 	rlog.addLog("res_len:", n)
 	if err != nil {
+		//client may be not read the body
 		rlog.addLog("io.copy_err:", err)
 	}
+
 	if err := resp.Body.Close(); err != nil {
 		rlog.addLog("close response body err:", err)
 	}

@@ -16,7 +16,8 @@ type Config struct {
 	confDir       string
 	configFile    string
 	timeout       int
-	re_try        int
+	reTry         int
+	reTryMax      int
 	aliveCheckUrl string
 	checkInterval int64
 	authType      int
@@ -57,7 +58,7 @@ func LoadConfig(configPath string) *Config {
 	if config.timeout > 120 {
 		config.timeout = 120
 	}
-	config.checkInterval = gconf.MustInt64(goconfig.DEFAULT_SECTION, "check_interval", 3600)
+	config.checkInterval = gconf.MustInt64(goconfig.DEFAULT_SECTION, "checkInterval", 3600)
 	if config.checkInterval <= 60 {
 		config.checkInterval = 1800
 	}
@@ -71,12 +72,11 @@ func LoadConfig(configPath string) *Config {
 		log.Println("conf error,unknow value authType:", _authType)
 	}
 
-	config.re_try = gconf.MustInt(goconfig.DEFAULT_SECTION, "re_try", 0)
-	if config.re_try > 10 {
-		config.re_try = 3
-	}
+	config.reTry = gconf.MustInt(goconfig.DEFAULT_SECTION, "reTry", 0)
 
-	aliveCheckUrl := gconf.MustValue(goconfig.DEFAULT_SECTION, "alive_check", "")
+	config.reTryMax = gconf.MustInt(goconfig.DEFAULT_SECTION, "reTryMax", 0)
+
+	aliveCheckUrl := gconf.MustValue(goconfig.DEFAULT_SECTION, "aliveCheck", "")
 	_, err = url.Parse(aliveCheckUrl)
 	if err != nil {
 		log.Println("alive check url wrong:", err)

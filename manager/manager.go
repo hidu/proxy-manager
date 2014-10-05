@@ -32,6 +32,7 @@ func NewProyManager(configPath string) *ProxyManager {
 	if manager.config == nil {
 		os.Exit(1)
 	}
+	setupLog(fmt.Sprintf("%s/%d.log", manager.config.confDir, manager.config.port))
 
 	manager.proxyPool = LoadProxyPool(manager)
 	if manager.proxyPool == nil {
@@ -87,4 +88,21 @@ func (manager *ProxyManager) loadUsers() {
 		log.Println("loadUsers suc,total:", len(manager.users))
 	}
 
+}
+
+func setupLog(logPath string) {
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
+	if err != nil {
+		log.Println("create log file failed [", logPath, "]", err)
+		os.Exit(2)
+	}
+	log.SetOutput(logFile)
+
+	utils.SetInterval(func() {
+		if !utils.File_exists(logPath) {
+			logFile.Close()
+			logFile, _ = os.OpenFile(logPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
+			log.SetOutput(logFile)
+		}
+	}, 30)
 }
