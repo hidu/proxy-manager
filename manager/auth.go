@@ -26,6 +26,9 @@ func (user *User) pswEq(psw string) bool {
 func (user *User) PswEnc() string {
 	return utils.StrMd5(fmt.Sprintf("%s:%s", user.Name, user.PswMd5))
 }
+func (user *User) Eq(u *User) bool {
+	return u != nil && user.Name == u.Name && u.PswMd5 == user.PswMd5
+}
 
 func getAuthorInfo(req *http.Request) *User {
 	defaultInfo := new(User)
@@ -42,6 +45,14 @@ func getAuthorInfo(req *http.Request) *User {
 		return defaultInfo
 	}
 	return &User{Name: userpass[0], PswMd5: utils.StrMd5(userpass[1])}
+}
+
+var defaultTestUserName string = "_test_"
+
+var defaultTestUser *User = &User{
+	Name:   defaultTestUserName,
+	Psw:    fmt.Sprintf("%d", ServerStartTime.UnixNano()),
+	PswMd5: utils.StrMd5(fmt.Sprintf("%d", ServerStartTime.UnixNano())),
 }
 
 func loadUsers(confPath string) (users map[string]*User, err error) {
@@ -91,12 +102,14 @@ func (manager *ProxyManager) checkHttpAuth(user *User) bool {
 		return true
 	case AuthType_Basic:
 		if u, has := manager.users[user.Name]; has {
-			return u.Name == user.Name && u.PswMd5 == user.PswMd5
+			return u.Eq(user)
+		}
+		if defaultTestUser.Eq(user) {
+			return true
 		}
 		return false
 	case AuthType_Basic_WithAny:
 		return user.Name != ""
-		return true
 	default:
 		return false
 	}

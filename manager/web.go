@@ -185,6 +185,10 @@ func (manager *ProxyManager) handel_test(w http.ResponseWriter, req *http.Reques
 
 		} else {
 			reqTest, _ := http.NewRequest("GET", urlStr, nil)
+			reqTest.SetBasicAuth(defaultTestUser.Name, defaultTestUser.Psw)
+			reqTest.Header.Set(proxyAuthorizatonHeader, reqTest.Header.Get("Authorization"))
+			reqTest.Header.Del("Authorization")
+
 			manager.httpClient.ServeHTTP(w, reqTest)
 		}
 
