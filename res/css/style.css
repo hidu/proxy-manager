@@ -70,6 +70,9 @@ table {border-collapse: collapse;border-spacing: 0;}
 .t_r{text-align: right !important;}
 .t_l{text-align: left !important;}
 
+.b_b{background: #F0F4F6;}
+.b_y{background: rgb(253, 234, 218);}
+
 #network_filter_form fieldset{padding-right:3px}
 
  #tb_network{font-size: 11px}

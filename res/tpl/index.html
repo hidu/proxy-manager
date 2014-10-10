@@ -1,18 +1,18 @@
 <br/>
-<br/>
-<div>{{.notice}}</div><br/>
+<p>http proxy manager,the easiest way to use and manager proxies!</p>
+<p>{{.notice}}</p>
 <table style="width:100%">
 <tr>
-<td width="400px" valign="top">
+<td width="360px" valign="top">
 <table style="width:100%" class="tb_1">
 <caption>status</caption>
-  <tr><th width="180px">server start</th> <td>{{.startTime}}</td></tr>
+  <tr><th width="130px">server start</th> <td>{{.startTime}}</td></tr>
   <tr><th>proxy total</th> <td>{{.proxy_count.total}}</td></tr>
   <tr><th>proxy active</th> <td>{{.proxy_count.active}} </td></tr>
-  <tr><th>proxy active_http</th> <td>{{.proxy_count.active_http}}</td></tr>
-  <tr><th>proxy active_socks5</th> <td>{{.proxy_count.active_socks5}}</td></tr>
-  <tr><th>proxy active_socks4</th> <td>{{.proxy_count.active_socks4}}</td></tr>
-  <tr><th>proxy active_socks4a</th> <td>{{.proxy_count.active_socks4a}}</td></tr>
+  <tr><th>active_http</th> <td>{{.proxy_count.active_http}}</td></tr>
+  <tr><th>active_socks5</th> <td>{{.proxy_count.active_socks5}}</td></tr>
+  <tr><th>active_socks4</th> <td>{{.proxy_count.active_socks4}}</td></tr>
+  <tr><th>active_socks4a</th> <td>{{.proxy_count.active_socks4a}}</td></tr>
   <tr><th>request total</th> <td>{{.proxyReqTotal}}</td></tr>
   <tr><th>request suc</th> <td>{{.proxy_count_suc}}</td></tr>
   <tr><th>request failed</th> <td>{{.proxy_count_failed}}</td></tr>
@@ -21,34 +21,43 @@
 </td>
 <td width="20px"></td>
 <td valign="top">
-<div class="h6">useage:</div>
 <div>
 
-<table class="tb_1">
-  <tr>
-    <td class="t_c">client</td>
-    <td class="t_c" width="20%">proxy</td>
-    <td class="t_c" width="20%">proxy pool</td>
-    <td class="t_c" width="20%">dst</td>
-  </tr>
-  <tr>
-    <td rowspan="4" class="t_c">
-    use proxy <font color="blue">http://name:psw@{{.proxy_host}}:{{.proxy_port}}</font>
-    </td>
-    <td rowspan="4" class="t_c">{{.proxy_host}}:{{.proxy_port}} <span class="right">&lt;-</span></td>
-    <td nowrap="nowrap">xxx.xxx.xxx:1234</td>
-    <td rowspan="4">www.baidu.com</td>
-  </tr>
-  <tr>
-    <td>xxx.xxx.xxx:2345</td>
-  </tr>
-  <tr>
-   <td>xxx.xxx.xxx:4567</td>
-  </tr>
-  <tr>
-   <td>xxx.xxx.xxx:3128</td>
-  </tr>
+<table  class="tb_1">
+    <caption> architecture </caption>
+    <tbody>
+        <tr>
+            <td rowspan="2"  class="t_c">client</td>
+            <td  colspan="2" class="t_c b_y">proxy manager</td>
+            <td rowspan="2"  class="t_c">dst</td>
+        </tr>
+        <tr>
+            <td class="t_c">http proxy</td>
+            <td class="t_c"> proxy pool</td>
+        </tr>
+		<tr>
+			<td rowspan="3" class="t_c">use proxy</td>
+			<td rowspan="3" class="t_c">{{.proxy_host}}:{{.proxy_port}}</td>
+			<td nowrap="nowrap">http://xxx.xxx:3128</td>
+			<td rowspan="3" class="t_c">www.baidu.com</td>
+		</tr>
+		<tr>
+			<td nowrap="nowrap">socks5://xxx.xxx:1080</td>
+		</tr>
+		<tr>
+			<td nowrap="nowrap">socks4://xxx.xxx:4567</td>
+		</tr>
+	</tbody>
 </table>
+<pre>$url="http://www.baidu.com/";
+ch = curl_init(); 
+curl_setopt($ch, CURLOPT_URL, $url); 
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, <b>CURLOPT_PROXY</b>,"<font color=blue>{{.proxy_host}}:{{.proxy_port}}</font>");
+curl_setopt($ch, <b>CURLOPT_PROXYUSERPWD</b>,"<font color=blue>name:psw</font>");//if necessary
+$body=curl_exec($ch); 
+curl_close($ch);
+</pre>
 
 </div>
 </td>
@@ -77,7 +86,7 @@ var x_man_no=1;
 	 <td class="t_c"><script>document.write(x_man_no++)</script></td>
 	 <td>{{$name}}</td>
 	 <td class="t_c">{{$proxy.Used|myNum}}</td>
-	 <td class="t_c">{{$proxy.LastCheck|shortTime}}</td>
+	 <td class="t_c" nowrap="nowrap">{{$proxy.LastCheck|shortTime}}</td>
 	 <td class="t_c">{{$proxy.CheckUsed}}</td>
 	 <td class="t_c">{{$proxy.Count.Success|myNum}}</td>
 	 <td class="t_c">{{$proxy.Count.Failed|myNum}}</td>
