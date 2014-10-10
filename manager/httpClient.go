@@ -101,7 +101,8 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 	}
 
 	for k := range req.Header {
-		if strings.HasPrefix(strings.ToLower(k), "x-man") {
+		k=strings.ToLower(k)
+		if strings.HasPrefix(k, "x-man") ||strings.HasPrefix(k,"proxy-"){
 			req.Header.Del(k)
 		}
 	}
