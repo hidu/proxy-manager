@@ -10,17 +10,18 @@ import (
 )
 
 type Config struct {
-	title         string
-	notice        string
-	port          int
-	confDir       string
-	configFile    string
-	timeout       int
-	reTry         int
-	reTryMax      int
-	aliveCheckUrl string
-	checkInterval int64
-	authType      int
+	title           string
+	notice          string
+	port            int
+	confDir         string
+	configFile      string
+	timeout         int
+	reTry           int
+	reTryMax        int
+	aliveCheckUrl   string
+	checkInterval   int64
+	authType        int
+	wrongStatusCode map[int]int
 }
 
 const (
@@ -51,6 +52,17 @@ func LoadConfig(configPath string) *Config {
 	config.title = gconf.MustValue(goconfig.DEFAULT_SECTION, "title", "")
 
 	config.notice = gconf.MustValue(goconfig.DEFAULT_SECTION, "notice", "")
+
+	config.wrongStatusCode = make(map[int]int)
+
+	wrongStatusCodeSlice := strings.Split(gconf.MustValue(goconfig.DEFAULT_SECTION, "wrongStatusCode", ""),",")
+
+	for _, v := range wrongStatusCodeSlice {
+		_code := int(getInt64(strings.TrimSpace(v)))
+		if _code > 0 {
+			config.wrongStatusCode[_code] = _code
+		}
+	}
 
 	config.port = gconf.MustInt(goconfig.DEFAULT_SECTION, "port", 8090)
 

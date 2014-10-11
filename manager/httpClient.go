@@ -101,8 +101,8 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 	}
 
 	for k := range req.Header {
-		k=strings.ToLower(k)
-		if strings.HasPrefix(k, "x-man") ||strings.HasPrefix(k,"proxy-"){
+		k = strings.ToLower(k)
+		if strings.HasPrefix(k, "x-man") || strings.HasPrefix(k, "proxy-") {
 			req.Header.Del(k)
 		}
 	}
@@ -132,6 +132,10 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 		}
 		resp, err = client.Do(req)
 		if err == nil {
+			if _, has := httpClient.ProxyManager.config.wrongStatusCode[resp.StatusCode]; has {
+				rlog.addLog("statusCode wrong def in conf", resp.StatusCode)
+				goto failed
+			}
 			if len(statusOk) != 0 {
 				if _, has := statusOk[resp.StatusCode]; !has {
 					rlog.addLog("statusCode wrong", resp.StatusCode)
