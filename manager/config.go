@@ -55,7 +55,7 @@ func LoadConfig(configPath string) *Config {
 
 	config.wrongStatusCode = make(map[int]int)
 
-	wrongStatusCodeSlice := strings.Split(gconf.MustValue(goconfig.DEFAULT_SECTION, "wrongStatusCode", ""),",")
+	wrongStatusCodeSlice := strings.Split(gconf.MustValue(goconfig.DEFAULT_SECTION, "wrongStatusCode", ""), ",")
 
 	for _, v := range wrongStatusCodeSlice {
 		_code := int(getInt64(strings.TrimSpace(v)))

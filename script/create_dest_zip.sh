@@ -20,6 +20,7 @@ rm -rf data/*
 mkdir conf
 cp ../conf/proxy.conf conf/proxy.conf
 echo -e "name:admin psw:psw is_admin:admin">conf/users
+echo -e "#proxy=http://127.0.0.1:8080">conf/pool.conf
 
 t=$(date +"%Y%m%d%H")
 
