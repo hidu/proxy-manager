@@ -16,11 +16,7 @@ if [ "$DEST_OS" == "windows" ];then
 fi
 
 go build -o $dest_file -ldflags "-s -w"  main.go 
-zip -r res.zip res
-cat res.zip>> $dest_file
-zip -A $dest_file
 mkdir -p dest/
 mv $dest_file dest/
-rm res.zip
 
 echo "all finish"

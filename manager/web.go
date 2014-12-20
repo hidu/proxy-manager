@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/hidu/goutils"
-	"github.com/hidu/goutils/resource"
 	"io"
 	"log"
 	"net/http"
@@ -34,7 +33,7 @@ func (manager *ProxyManager) serveLocalRequest(w http.ResponseWriter, req *http.
 	})()
 
 	if strings.HasPrefix(req.URL.Path, "/res/") {
-		resource.DefaultResource.HandleStatic(w, req, req.URL.Path)
+		Assest.HttpHandler("/").ServeHTTP(w, req)
 		return
 	}
 
@@ -256,7 +255,8 @@ func (manager *ProxyManager) handel_checkLogin(req *http.Request) (user *User, i
 }
 
 func render_html(fileName string, values map[string]interface{}, layout bool) string {
-	html := resource.DefaultResource.Load("/res/tpl/" + fileName)
+	//	html := resource.DefaultResource.Load("/res/tpl/" + fileName)
+	html := Assest.GetContent("/res/tpl/" + fileName)
 	myfn := template.FuncMap{
 		"shortTime": func(tu int64) string {
 			t := time.Unix(tu, 0)

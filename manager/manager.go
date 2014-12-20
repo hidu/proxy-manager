@@ -7,7 +7,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
-//	"sync/atomic"
+	//	"sync/atomic"
 	"time"
 )
 
@@ -65,7 +65,7 @@ func (manager *ProxyManager) ServeHTTP(w http.ResponseWriter, req *http.Request)
 		log.Println("bad request,err", err)
 		return
 	}
-//	atomic.AddInt64(&(manager.reqNum), 1)
+	//	atomic.AddInt64(&(manager.reqNum), 1)
 
 	isLocalReq := port_int == manager.config.port
 
