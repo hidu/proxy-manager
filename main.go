@@ -1,7 +1,7 @@
 package main
 
 import (
-	"./manager"
+	"github.com/hidu/proxy-manager/manager"
 	"flag"
 	"log"
 )
