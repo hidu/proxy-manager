@@ -1,5 +1,5 @@
 {
-  "assestDir":"res",
-  "destName":"manager/assest.go",
-  "packageName":"manager"
+  "src":"res",
+  "dest":"manager/assest.go",
+  "package":"manager"
 }
