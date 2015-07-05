@@ -33,7 +33,10 @@ type AssestStruct struct {
 var _assest_direct bool
 
 func init() {
-	flag.BoolVar(&_assest_direct, "assest_direct", false, "for debug,read assest direct")
+	exeName := filepath.Base(os.Getenv("_"))
+	if exeName == "go" || exeName == "go.exe" {
+		flag.BoolVar(&_assest_direct, "assest_direct", false, "for debug,read assest direct")
+	}
 }
 
 var _assestCwd, _ = os.Getwd()
@@ -86,6 +89,9 @@ func (statics AssestStruct) GetFileNames(dir string) []string {
 }
 
 func (statics *AssestStruct) FileHandlerFunc(name string) http.HandlerFunc {
+	if strings.Contains(name, "private") {
+		return http.NotFound
+	}
 	static, err := statics.GetAssestFile(name)
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
