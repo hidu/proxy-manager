@@ -1,0 +1,26 @@
+{
+	"ImportPath": "github.com/hidu/proxy-manager",
+	"GoVersion": "go1.5.1",
+	"Packages": [
+		"./..."
+	],
+	"Deps": [
+		{
+			"ImportPath": "code.google.com/p/go.net/proxy",
+			"Comment": "null-240",
+			"Rev": "937a34c9de13c766c814510f76bca091dee06028"
+		},
+		{
+			"ImportPath": "github.com/Unknwon/goconfig",
+			"Rev": "5cfc02f2789e6e98d8546e40b29d907aedc4c590"
+		},
+		{
+			"ImportPath": "github.com/hailiang/socks",
+			"Rev": "744b68c788e37b9effd37d656672bf3ace14a0cf"
+		},
+		{
+			"ImportPath": "github.com/hidu/goutils",
+			"Rev": "ee2ee06e1fab98420ba500419a9cac952d58e82d"
+		}
+	]
+}

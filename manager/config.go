@@ -2,12 +2,12 @@ package manager
 
 import (
 	"github.com/Unknwon/goconfig"
+	"io/ioutil"
 	"log"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
-	"io/ioutil"
 )
 
 type Config struct {
@@ -103,8 +103,8 @@ func LoadConfig(configPath string) *Config {
 
 func InitConf(confDir string) {
 	stat, err := os.Stat(confDir)
-	if(err==nil){
-		err=os.Chdir(confDir)
+	if err == nil {
+		err = os.Chdir(confDir)
 	}
 	if err != nil {
 		log.Println("err:", err)
@@ -114,15 +114,15 @@ func InitConf(confDir string) {
 		log.Println("not dir")
 		os.Exit(1)
 	}
-	stat,err=os.Stat("proxy.conf")
-	
-	if(os.IsExist(err)){
+	stat, err = os.Stat("proxy.conf")
+
+	if os.IsExist(err) {
 		log.Println("proxy.conf exists!")
 		os.Exit(1)
 	}
-	
-	ioutil.WriteFile("proxy.conf",[]byte(Assest.GetContent("/res/conf/proxy.conf")),0644)
-	ioutil.WriteFile("pool.conf",[]byte(Assest.GetContent("/res/conf/pool.conf")),0644)
-	ioutil.WriteFile("users",[]byte(Assest.GetContent("/res/conf/users")),0644)
+
+	ioutil.WriteFile("proxy.conf", []byte(Assest.GetContent("/res/conf/proxy.conf")), 0644)
+	ioutil.WriteFile("pool.conf", []byte(Assest.GetContent("/res/conf/pool.conf")), 0644)
+	ioutil.WriteFile("users", []byte(Assest.GetContent("/res/conf/users")), 0644)
 	log.Println("init conf done")
 }

@@ -33,7 +33,7 @@ func (manager *ProxyManager) serveLocalRequest(w http.ResponseWriter, req *http.
 	})()
 
 	if strings.HasPrefix(req.URL.Path, "/res/") {
-		Assest.HttpHandler("/").ServeHTTP(w, req)
+		Assest.HTTPHandler("/").ServeHTTP(w, req)
 		return
 	}
 
