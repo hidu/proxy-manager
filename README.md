@@ -2,13 +2,13 @@ proxy-manager
 ============
 
 ##概述
-1  统一管理 http、socks4、socks4a、socks5 代理
-2  自动检查代理是否可用
-3  对外统一提供http代理服务
-4  对外代理服务支持http basic认证
+1.  统一管理 http、socks4、socks4a、socks5 代理
+2.  自动检查代理是否可用
+3.  对外统一提供http代理服务
+4.  对外代理服务支持http basic认证
 
 ##安装
-需要安装golang
+需要安装[golang](https://golang.org/dl/  "下载安装")
 ```
 go get -u github.com/hidu/proxy-manager
 ```
