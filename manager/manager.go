@@ -11,31 +11,34 @@ import (
 	"time"
 )
 
-var PROXY_DEBUG bool = false
+// ProxyDebug 是否debug
+var ProxyDebug = false
 
+// ProxyManager manager server
 type ProxyManager struct {
-	httpClient *HttpClient
-	config     *Config
+	httpClient *httpClient
+	config     *config
 	proxyPool  *ProxyPool
 	reqNum     int64
 	startTime  time.Time
-	users      map[string]*User
+	users      map[string]*user
 }
 
+// NewProyManager init server
 func NewProyManager(configPath string) *ProxyManager {
 	log.Println("loading...")
 	rand.Seed(time.Now().UnixNano())
 	manager := &ProxyManager{}
 	manager.startTime = time.Now()
 	manager.reqNum = 0
-	manager.config = LoadConfig(configPath)
+	manager.config = loadConfig(configPath)
 
 	if manager.config == nil {
 		os.Exit(1)
 	}
 	setupLog(fmt.Sprintf("%s/%d.log", manager.config.confDir, manager.config.port))
 
-	manager.proxyPool = LoadProxyPool(manager)
+	manager.proxyPool = loadProxyPool(manager)
 	if manager.proxyPool == nil {
 		os.Exit(1)
 	}
@@ -46,10 +49,11 @@ func NewProyManager(configPath string) *ProxyManager {
 		manager.loadUsers()
 	}, 300)
 
-	manager.httpClient = NewHttpClient(manager)
+	manager.httpClient = newHTTPClient(manager)
 	return manager
 }
 
+// Start start server
 func (manager *ProxyManager) Start() {
 	addr := fmt.Sprintf("%s:%d", "", manager.config.port)
 	fmt.Println("start proxy manager at:", addr)
@@ -57,8 +61,9 @@ func (manager *ProxyManager) Start() {
 	log.Println(err)
 }
 
+// ServeHTTP ServeHTTP
 func (manager *ProxyManager) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	host, port_int, err := utils.Net_getHostPortFromReq(req)
+	host, portInt, err := utils.Net_getHostPortFromReq(req)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("bad request"))
@@ -67,7 +72,7 @@ func (manager *ProxyManager) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	}
 	//	atomic.AddInt64(&(manager.reqNum), 1)
 
-	isLocalReq := port_int == manager.config.port
+	isLocalReq := portInt == manager.config.port
 
 	if isLocalReq {
 		isLocalReq = utils.Net_isLocalIp(host)

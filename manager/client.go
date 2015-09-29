@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func NewClient(proxyURL *url.URL, timeout int) (*http.Client, error) {
+func newClient(proxyURL *url.URL, timeout int) (*http.Client, error) {
 	client := &http.Client{}
 	client.Timeout = time.Duration(timeout) * time.Second
 

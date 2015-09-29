@@ -8,7 +8,7 @@ import (
 )
 
 var configPath = flag.String("conf", "./conf/proxy.conf", "proxy's config file")
-var initConf = flag.String("init_conf", "", "init conf if not exists")
+var initConf = flag.String("init_conf", "", "[conf dir] init conf if not exists")
 
 func main() {
 	flag.Usage = func() {

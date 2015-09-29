@@ -6,65 +6,66 @@ import (
 	"net/url"
 )
 
-type PROXY_STATUS int
+type proxyStatus int
 
 const (
-	PROXY_STATUS_UNKNOW PROXY_STATUS = iota
-	PROXY_STATUS_ACTIVE
-	PROXY_STATUS_UNAVAILABLE
+	proxyStatusUnknow proxyStatus = iota
+	proxyStatusActive
+	proxyStatusUnavaliable
 )
 
-func (status PROXY_STATUS) String() string {
+func (status proxyStatus) String() string {
 	switch status {
-	case PROXY_STATUS_UNKNOW:
+	case proxyStatusUnknow:
 		return "unknow"
-	case PROXY_STATUS_ACTIVE:
+	case proxyStatusActive:
 		return "active"
-	case PROXY_STATUS_UNAVAILABLE:
+	case proxyStatusUnavaliable:
 		return "unavailable"
 	}
 	return fmt.Sprintf("unknow status:%d", status)
 }
 
-type PROXY_USED_STATUS int
+type proxyUsedStatus int
 
 const (
-	PROXY_USED_SUC PROXY_USED_STATUS = iota
-	PROXY_USED_FAILED
+	proxyUsedSuc proxyUsedStatus = iota
+	proxyUsedFailed
 )
 
-func (status PROXY_USED_STATUS) String() string {
+func (status proxyUsedStatus) String() string {
 	switch status {
-	case PROXY_USED_SUC:
+	case proxyUsedSuc:
 		return "success"
-	case PROXY_USED_FAILED:
+	case proxyUsedFailed:
 		return "failed"
 	}
 	return fmt.Sprintf("unknow status:%d", status)
 }
 
+// Proxy 一个代理
 type Proxy struct {
 	proxy       string
 	URL         *url.URL
 	Weight      int
-	StatusCode  PROXY_STATUS
+	StatusCode  proxyStatus
 	CheckUsed   int64 //ms
 	LastCheck   int64
 	LastCheckOk int64
 	Used        int64
-	Count       *ProxyCount
+	Count       *proxyCount
 }
 
-func NewProxy(proxyUrl string) *Proxy {
-	proxy := &Proxy{proxy: proxyUrl}
+func newProxy(proxyURL string) *Proxy {
+	proxy := &Proxy{proxy: proxyURL}
 	var err error
-	proxy.URL, err = url.Parse(proxyUrl)
+	proxy.URL, err = url.Parse(proxyURL)
 	if err != nil {
 		log.Println("proxy info wrong", err)
 		return nil
 	}
 	proxy.Weight = 0
-	proxy.Count = NewProxyCount()
+	proxy.Count = newProxyCount()
 	return proxy
 }
 
@@ -79,6 +80,7 @@ func (proxy *Proxy) String() string {
 	)
 }
 
+// IsOk 是否可用状态
 func (proxy *Proxy) IsOk() bool {
-	return proxy.StatusCode == PROXY_STATUS_ACTIVE
+	return proxy.StatusCode == proxyStatusActive
 }

@@ -14,11 +14,11 @@ import (
 	"time"
 )
 
-const CookieName = "x-man-proxy"
+const cookieName = "x-man-proxy"
 
 type webRequestCtx struct {
 	values  map[string]interface{}
-	user    *User
+	user    *user
 	isLogin bool
 }
 
@@ -37,7 +37,7 @@ func (manager *ProxyManager) serveLocalRequest(w http.ResponseWriter, req *http.
 		return
 	}
 
-	user, isLogin := manager.handel_checkLogin(req)
+	user, isLogin := manager.handelCheckLogin(req)
 
 	values := make(map[string]interface{})
 	values["title"] = manager.config.title
@@ -52,8 +52,8 @@ func (manager *ProxyManager) serveLocalRequest(w http.ResponseWriter, req *http.
 		values["isAdmin"] = false
 	}
 
-	values["startTime"] = manager.startTime.Format(TIME_FORMAT_STD)
-	values["version"] = ProxyVersion
+	values["startTime"] = manager.startTime.Format(timeFormatStd)
+	values["version"] = GetVersion()
 	values["notice"] = manager.config.notice
 	values["port"] = fmt.Sprintf("%d", manager.config.port)
 	values["config"] = manager.config
@@ -72,12 +72,12 @@ func (manager *ProxyManager) serveLocalRequest(w http.ResponseWriter, req *http.
 
 	funcMap := make(map[string]func(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx))
 
-	funcMap["/"] = manager.handel_index
-	funcMap["/about"] = manager.handel_about
-	funcMap["/add"] = manager.handel_add
-	funcMap["/test"] = manager.handel_test
-	funcMap["/login"] = manager.handel_login
-	funcMap["/logout"] = manager.handel_logout
+	funcMap["/"] = manager.handelIndex
+	funcMap["/about"] = manager.handelAbout
+	funcMap["/add"] = manager.handelAdd
+	funcMap["/test"] = manager.handelTest
+	funcMap["/login"] = manager.handelLogin
+	funcMap["/logout"] = manager.handelLogout
 
 	if fn, has := funcMap[req.URL.Path]; has {
 		fn(w, req, ctx)
@@ -87,19 +87,19 @@ func (manager *ProxyManager) serveLocalRequest(w http.ResponseWriter, req *http.
 
 }
 
-func (manager *ProxyManager) handel_index(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
+func (manager *ProxyManager) handelIndex(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
 	values := ctx.values
 	values["proxy_count_suc"] = manager.proxyPool.Count.Success
 	values["proxy_count_failed"] = manager.proxyPool.Count.Failed
 	values["proxy_count"] = manager.proxyPool.GetProxyNums()
 	values["proxys"] = manager.proxyPool.proxyListActive
 
-	code := render_html("index.html", values, true)
+	code := renderHTML("index.html", values, true)
 	w.Write([]byte(code))
 }
-func (manager *ProxyManager) handel_add(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
+func (manager *ProxyManager) handelAdd(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
 	values := ctx.values
-	do_post := func() {
+	doPost := func() {
 		if !ctx.isAdmin() {
 			w.Write([]byte("<script>alert('must admin');</script>"))
 			log.Println("no admin", req.RemoteAddr)
@@ -129,29 +129,29 @@ func (manager *ProxyManager) handel_add(w http.ResponseWriter, req *http.Request
 
 	switch req.Method {
 	case "GET":
-		code := render_html("add.html", values, true)
+		code := renderHTML("add.html", values, true)
 		w.Write([]byte(code))
 		return
 	case "POST":
-		do_post()
+		doPost()
 		return
 
 	}
 	http.NotFound(w, req)
 }
-func (manager *ProxyManager) handel_about(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
+func (manager *ProxyManager) handelAbout(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
 	values := ctx.values
-	code := render_html("about.html", values, true)
+	code := renderHTML("about.html", values, true)
 	w.Write([]byte(code))
 }
-func (manager *ProxyManager) handel_logout(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
-	cookie := &http.Cookie{Name: CookieName, Value: "", Path: "/"}
+func (manager *ProxyManager) handelLogout(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
+	cookie := &http.Cookie{Name: cookieName, Value: "", Path: "/"}
 	http.SetCookie(w, cookie)
 	http.Redirect(w, req, "/", 302)
 }
-func (manager *ProxyManager) handel_test(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
+func (manager *ProxyManager) handelTest(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
 	values := ctx.values
-	do_post := func() {
+	doPost := func() {
 		token, err := strconv.ParseInt(req.PostFormValue("token"), 10, 64)
 		if err != nil {
 			w.Write([]byte("params wrong"))
@@ -171,7 +171,7 @@ func (manager *ProxyManager) handel_test(w http.ResponseWriter, req *http.Reques
 				w.Write([]byte(fmt.Sprintf("wrong proxy info [%s],err:%v", proxyStr, err)))
 				return
 			}
-			proxy := NewProxy(proxyStr)
+			proxy := newProxy(proxyStr)
 			resp, err := doRequestGet(urlStr, proxy, 5)
 			if err != nil {
 				w.WriteHeader(502)
@@ -201,18 +201,18 @@ func (manager *ProxyManager) handel_test(w http.ResponseWriter, req *http.Reques
 
 		values["token"] = fmt.Sprintf("%d", manager.startTime.UnixNano()+nowInt)
 
-		code := render_html("test.html", values, true)
+		code := renderHTML("test.html", values, true)
 		w.Write([]byte(code))
 		return
 	case "POST":
-		do_post()
+		doPost()
 		return
 
 	}
 	http.NotFound(w, req)
 }
 
-func (manager *ProxyManager) handel_login(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
+func (manager *ProxyManager) handelLogin(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
 	values := ctx.values
 	if req.Method == "POST" {
 		name := req.PostFormValue("name")
@@ -220,7 +220,7 @@ func (manager *ProxyManager) handel_login(w http.ResponseWriter, req *http.Reque
 		if user, has := manager.users[name]; has && user.pswEq(psw) {
 			log.Println("login suc,name=", name)
 			cookie := &http.Cookie{
-				Name:    CookieName,
+				Name:    cookieName,
 				Value:   fmt.Sprintf("%s:%s", name, user.PswEnc()),
 				Path:    "/",
 				Expires: time.Now().Add(86400 * time.Second),
@@ -231,16 +231,16 @@ func (manager *ProxyManager) handel_login(w http.ResponseWriter, req *http.Reque
 			w.Write([]byte("<script>alert('login failed')</script>"))
 		}
 	} else {
-		code := render_html("login.html", values, true)
+		code := renderHTML("login.html", values, true)
 		w.Write([]byte(code))
 	}
 }
 
-func (manager *ProxyManager) handel_checkLogin(req *http.Request) (user *User, isLogin bool) {
+func (manager *ProxyManager) handelCheckLogin(req *http.Request) (user *user, isLogin bool) {
 	if req == nil {
 		return
 	}
-	cookie, err := req.Cookie(CookieName)
+	cookie, err := req.Cookie(cookieName)
 	if err != nil {
 		return
 	}
@@ -254,20 +254,19 @@ func (manager *ProxyManager) handel_checkLogin(req *http.Request) (user *User, i
 	return
 }
 
-func render_html(fileName string, values map[string]interface{}, layout bool) string {
+func renderHTML(fileName string, values map[string]interface{}, layout bool) string {
 	//	html := resource.DefaultResource.Load("/res/tpl/" + fileName)
 	html := Assest.GetContent("/res/tpl/" + fileName)
 	myfn := template.FuncMap{
 		"shortTime": func(tu int64) string {
 			t := time.Unix(tu, 0)
-			return t.Format(TIME_FORMAT_STD)
+			return t.Format(timeFormatStd)
 		},
 		"myNum": func(n int64) string {
 			if n == 0 {
 				return ""
-			} else {
-				return fmt.Sprintf("%d", n)
 			}
+			return fmt.Sprintf("%d", n)
 		},
 	}
 
@@ -279,7 +278,7 @@ func render_html(fileName string, values map[string]interface{}, layout bool) st
 	body := w.String()
 	if layout {
 		values["body"] = body
-		return render_html("layout.html", values, false)
+		return renderHTML("layout.html", values, false)
 	}
 	return utils.Html_reduceSpace(body)
 }

@@ -5,25 +5,25 @@ import (
 	"sync/atomic"
 )
 
-type ProxyCount struct {
+type proxyCount struct {
 	Total   int64
 	Success int64
 	Failed  int64
 }
 
-func NewProxyCount() *ProxyCount {
-	return &ProxyCount{}
+func newProxyCount() *proxyCount {
+	return &proxyCount{}
 }
 
-func (count *ProxyCount) MarkStatus(status PROXY_USED_STATUS) {
-	if status == PROXY_USED_SUC {
+func (count *proxyCount) MarkStatus(status proxyUsedStatus) {
+	if status == proxyUsedSuc {
 		atomic.AddInt64(&count.Success, 1)
-	} else if status == PROXY_USED_FAILED {
+	} else if status == proxyUsedFailed {
 		atomic.AddInt64(&count.Failed, 1)
 	}
 	atomic.AddInt64(&count.Total, 1)
 }
 
-func (count *ProxyCount) String() string {
+func (count *proxyCount) String() string {
 	return fmt.Sprintf("total:%d,success:%d,failed:%d", count.Total, count.Success, count.Failed)
 }

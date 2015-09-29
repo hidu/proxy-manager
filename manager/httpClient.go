@@ -15,10 +15,10 @@ type requestLog struct {
 	logData   []string
 	startTime time.Time
 	req       *http.Request
-	logId     int64
+	logID     int64
 }
 
-func NewRequestLog(req *http.Request) *requestLog {
+func newRequestLog(req *http.Request) *requestLog {
 	rlog := &requestLog{req: req}
 	rlog.reset()
 	return rlog
@@ -29,7 +29,7 @@ func (rlog *requestLog) print() {
 		return
 	}
 	used := time.Now().Sub(rlog.startTime)
-	log.Println("logid:", rlog.logId,
+	log.Println("logID:", rlog.logID,
 		rlog.req.Method, rlog.req.URL.String(),
 		strings.Join(rlog.data, " "),
 		strings.Join(rlog.logData, " "),
@@ -48,33 +48,33 @@ func (rlog *requestLog) reset() {
 	rlog.logData = []string{}
 }
 
-type HttpClient struct {
+type httpClient struct {
 	ProxyManager *ProxyManager
 }
 
-func NewHttpClient(manager *ProxyManager) *HttpClient {
+func newHTTPClient(manager *ProxyManager) *httpClient {
 	log.Println("loading http client...")
-	proxy := new(HttpClient)
+	proxy := new(httpClient)
 	proxy.ProxyManager = manager
 
 	return proxy
 }
 
-func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	rlog := NewRequestLog(req)
+func (httpClient *httpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	rlog := newRequestLog(req)
 
-	rlog.logId = httpClient.ProxyManager.reqNum + time.Now().Unix()
+	rlog.logID = httpClient.ProxyManager.reqNum + time.Now().Unix()
 
 	defer rlog.print()
 	user := getAuthorInfo(req)
 	rlog.setLog("uname", user.Name)
 
-	if PROXY_DEBUG {
+	if ProxyDebug {
 		dump, _ := httputil.DumpRequest(req, true)
 		log.Println("req dump:\n", string(dump))
 	}
 
-	if !httpClient.ProxyManager.checkHttpAuth(user) {
+	if !httpClient.ProxyManager.checkHTTPAuth(user) {
 		rlog.addLog("auth", "failed")
 		w.Header().Set("Proxy-Authenticate", "Basic realm=auth need")
 		w.WriteHeader(407)
@@ -95,9 +95,9 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 		}
 	}
 	_clientReTry := -1
-	x_man_retry := req.Header.Get("X-Man-ReTry")
-	if x_man_retry != "" {
-		_clientReTry = int(getInt64(x_man_retry))
+	xManRetry := req.Header.Get("X-Man-ReTry")
+	if xManRetry != "" {
+		_clientReTry = int(getInt64(xManRetry))
 	}
 
 	for k := range req.Header {
@@ -110,14 +110,14 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 	var resp *http.Response
 	var err error
 
-	max_re_try := httpClient.ProxyManager.config.reTry + 1
+	maxReTry := httpClient.ProxyManager.config.reTry + 1
 	if _clientReTry >= 0 && _clientReTry <= httpClient.ProxyManager.config.reTryMax {
-		max_re_try = _clientReTry + 1
+		maxReTry = _clientReTry + 1
 	}
 	no := 1
-	for ; no <= max_re_try; no++ {
-		rlog.addLog("try", fmt.Sprintf("%d/%d", no, max_re_try))
-		proxy, err := httpClient.ProxyManager.proxyPool.GetOneProxy(user.Name)
+	for ; no <= maxReTry; no++ {
+		rlog.addLog("try", fmt.Sprintf("%d/%d", no, maxReTry))
+		proxy, err := httpClient.ProxyManager.proxyPool.getOneProxy(user.Name)
 		if err != nil {
 			rlog.addLog("get_proxy_faield", err)
 			rlog.print()
@@ -125,7 +125,7 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 		}
 		rlog.addLog("proxy", proxy.proxy)
 		rlog.addLog("proxyUsed", proxy.Used)
-		client, err := NewClient(proxy.URL, httpClient.ProxyManager.config.timeout)
+		client, err := newClient(proxy.URL, httpClient.ProxyManager.config.timeout)
 		if err != nil {
 			rlog.addLog("get http client failed", err)
 			continue
@@ -142,7 +142,7 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 					goto failed
 				}
 			}
-			httpClient.ProxyManager.proxyPool.MarkProxyStatus(proxy, PROXY_USED_SUC)
+			httpClient.ProxyManager.proxyPool.markProxyStatus(proxy, proxyUsedSuc)
 			break
 		} else {
 			rlog.addLog("resErr", err.Error())
@@ -150,17 +150,17 @@ func (httpClient *HttpClient) ServeHTTP(w http.ResponseWriter, req *http.Request
 
 	failed:
 		{
-			httpClient.ProxyManager.proxyPool.MarkProxyStatus(proxy, PROXY_USED_FAILED)
+			httpClient.ProxyManager.proxyPool.markProxyStatus(proxy, proxyUsedFailed)
 			rlog.addLog("failed")
-			if no == max_re_try {
+			if no == maxReTry {
 				rlog.addLog("all failed")
 			}
 			rlog.print()
 		}
 	}
 
-	w.Header().Set("x-man-try", fmt.Sprintf("%d/%d", no, max_re_try))
-	w.Header().Set("x-man-id", fmt.Sprintf("%d", rlog.logId))
+	w.Header().Set("x-man-try", fmt.Sprintf("%d/%d", no, maxReTry))
+	w.Header().Set("x-man-id", fmt.Sprintf("%d", rlog.logID))
 
 	if err != nil || resp == nil {
 		w.WriteHeader(550)

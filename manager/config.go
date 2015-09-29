@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-type Config struct {
+type config struct {
 	title           string
 	notice          string
 	port            int
@@ -19,20 +19,23 @@ type Config struct {
 	timeout         int
 	reTry           int
 	reTryMax        int
-	aliveCheckUrl   string
+	aliveCheckURL   string
 	checkInterval   int64
 	authType        int
 	wrongStatusCode map[int]int
 }
 
 const (
-	AuthType_NO            = 0
-	AuthType_Basic         = 1
-	AuthType_Basic_WithAny = 2
+	// AuthTypeNO 不需要认证
+	AuthTypeNO = 0
+	// AuthTypeBasic 使用basic
+	AuthTypeBasic = 1
+	// AuthTypeBasicWithAny 使用basic，任意账号密码都可以
+	AuthTypeBasicWithAny = 2
 )
 
-func LoadConfig(configPath string) *Config {
-	config := &Config{}
+func loadConfig(configPath string) *config {
+	config := &config{}
 	absPath, err := filepath.Abs(configPath)
 
 	config.configFile = absPath
@@ -89,18 +92,18 @@ func LoadConfig(configPath string) *Config {
 
 	config.reTryMax = gconf.MustInt(goconfig.DEFAULT_SECTION, "reTryMax", 0)
 
-	aliveCheckUrl := gconf.MustValue(goconfig.DEFAULT_SECTION, "aliveCheck", "")
-	_, err = url.Parse(aliveCheckUrl)
+	aliveCheckURL := gconf.MustValue(goconfig.DEFAULT_SECTION, "aliveCheck", "")
+	_, err = url.Parse(aliveCheckURL)
 	if err != nil {
 		log.Println("alive check url wrong:", err)
 		return nil
-	} else {
-		config.aliveCheckUrl = aliveCheckUrl
 	}
+	config.aliveCheckURL = aliveCheckURL
 
 	return config
 }
 
+// InitConf 第一次运行 初始化配置文件目录
 func InitConf(confDir string) {
 	stat, err := os.Stat(confDir)
 	if err == nil {

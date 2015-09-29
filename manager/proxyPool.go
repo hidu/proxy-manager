@@ -12,6 +12,7 @@ import (
 	"time"
 )
 
+// ProxyPool 代理池
 type ProxyPool struct {
 	proxyListActive map[string]*Proxy
 	proxyListAll    map[string]*Proxy
@@ -20,7 +21,7 @@ type ProxyPool struct {
 	SessionProxys map[int64]map[string]*Proxy
 	ProxyManager  *ProxyManager
 
-	aliveCheckUrl      string
+	aliveCheckURL      string
 	aliveCheckResponse *http.Response
 
 	checkChan     chan string
@@ -30,10 +31,11 @@ type ProxyPool struct {
 
 	proxyUsed map[string]map[string]int64
 
-	Count *ProxyCount
+	Count *proxyCount
 }
 
-func LoadProxyPool(manager *ProxyManager) *ProxyPool {
+// loadProxyPool 从配置文件中加载代理池
+func loadProxyPool(manager *ProxyManager) *ProxyPool {
 	log.Println("loading proxy pool...")
 	pool := &ProxyPool{}
 	pool.ProxyManager = manager
@@ -47,20 +49,19 @@ func LoadProxyPool(manager *ProxyManager) *ProxyPool {
 	pool.testRunChan = make(chan bool, 1)
 	pool.timeout = manager.config.timeout
 
-	pool.aliveCheckUrl = manager.config.aliveCheckUrl
+	pool.aliveCheckURL = manager.config.aliveCheckURL
 	pool.checkInterval = manager.config.checkInterval
-	pool.Count = NewProxyCount()
+	pool.Count = newProxyCount()
 
-	if pool.aliveCheckUrl != "" {
+	if pool.aliveCheckURL != "" {
 		var err error
-		urlStr := strings.Replace(pool.aliveCheckUrl, "{%rand}", fmt.Sprintf("%d", time.Now().UnixNano()), -1)
+		urlStr := strings.Replace(pool.aliveCheckURL, "{%rand}", fmt.Sprintf("%d", time.Now().UnixNano()), -1)
 		pool.aliveCheckResponse, err = doRequestGet(urlStr, nil, pool.timeout)
 		if err != nil {
-			log.Println("get origin alive response failed,url:", pool.aliveCheckUrl, "err:", err)
+			log.Println("get origin alive response failed,url:", pool.aliveCheckURL, "err:", err)
 			return nil
-		} else {
-			log.Println("get alive info suc!url:", pool.aliveCheckUrl, "resp_header:", pool.aliveCheckResponse.Header)
 		}
+		log.Println("get alive info suc!url:", pool.aliveCheckURL, "resp_header:", pool.aliveCheckResponse.Header)
 	}
 
 	proxyAll, err := pool.loadConf("pool.conf")
@@ -139,7 +140,7 @@ func (pool *ProxyPool) parseProxy(info map[string]string) *Proxy {
 	if info == nil {
 		return nil
 	}
-	proxy := NewProxy(info["proxy"])
+	proxy := newProxy(info["proxy"])
 	if proxy == nil {
 		return nil
 	}
@@ -154,29 +155,29 @@ func (pool *ProxyPool) parseProxy(info map[string]string) *Proxy {
 		}
 	}
 	proxy.Weight = intValues["weight"]
-	proxy.StatusCode = PROXY_STATUS(intValues["status"])
+	proxy.StatusCode = proxyStatus(intValues["status"])
 	proxy.CheckUsed = int64(intValues["check_used"])
 	proxy.LastCheck = int64(intValues["last_check"])
 	proxy.LastCheckOk = int64(intValues["last_check_ok"])
 	return proxy
 }
 
-func (pool *ProxyPool) GetProxy(proxy_url string) *Proxy {
+func (pool *ProxyPool) getProxy(proxyURL string) *Proxy {
 	pool.mu.RLock()
 	defer pool.mu.RUnlock()
-	if proxy, has := pool.proxyListAll[proxy_url]; has {
+	if proxy, has := pool.proxyListAll[proxyURL]; has {
 		return proxy
 	}
 	return nil
 }
 
-func (pool *ProxyPool) addProxyActive(proxy_url string) bool {
+func (pool *ProxyPool) addProxyActive(proxyURL string) bool {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
-	if proxy, has := pool.proxyListAll[proxy_url]; has {
-		if _, hasAct := pool.proxyListActive[proxy_url]; !hasAct {
-			pool.proxyListActive[proxy_url] = proxy
+	if proxy, has := pool.proxyListAll[proxyURL]; has {
+		if _, hasAct := pool.proxyListActive[proxyURL]; !hasAct {
+			pool.proxyListActive[proxyURL] = proxy
 			return true
 		}
 	}
@@ -194,28 +195,29 @@ func (pool *ProxyPool) addProxy(proxy *Proxy) bool {
 	return false
 }
 
-func (pool *ProxyPool) removeProxyActive(proxy_url string) {
+func (pool *ProxyPool) removeProxyActive(proxyURL string) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
-	if _, hasAct := pool.proxyListActive[proxy_url]; hasAct {
-		delete(pool.proxyListActive, proxy_url)
+	if _, hasAct := pool.proxyListActive[proxyURL]; hasAct {
+		delete(pool.proxyListActive, proxyURL)
 	}
 }
 
-func (pool *ProxyPool) removeProxy(proxy_url string) {
+func (pool *ProxyPool) removeProxy(proxyURL string) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
-	if _, hasAct := pool.proxyListAll[proxy_url]; hasAct {
-		delete(pool.proxyListAll, proxy_url)
+	if _, hasAct := pool.proxyListAll[proxyURL]; hasAct {
+		delete(pool.proxyListAll, proxyURL)
 	}
-	if _, hasAct := pool.proxyListActive[proxy_url]; hasAct {
-		delete(pool.proxyListActive, proxy_url)
+	if _, hasAct := pool.proxyListActive[proxyURL]; hasAct {
+		delete(pool.proxyListActive, proxyURL)
 	}
 }
 
-var errorNoProxy error = fmt.Errorf("no active proxy")
+var errorNoProxy = fmt.Errorf("no active proxy")
 
-func (pool *ProxyPool) GetOneProxy(uname string) (*Proxy, error) {
+//
+func (pool *ProxyPool) getOneProxy(uname string) (*Proxy, error) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 	l := len(pool.proxyListActive)
@@ -253,7 +255,7 @@ func (pool *ProxyPool) runTest() {
 	for name := range pool.proxyListAll {
 		wg.Add(1)
 		go (func(proxyUrl string) {
-			pool.TestProxyAddActive(proxyUrl)
+			pool.testProxyAddActive(proxyUrl)
 			wg.Done()
 		})(name)
 	}
@@ -264,16 +266,17 @@ func (pool *ProxyPool) runTest() {
 
 	pool.cleanBadProxy(86400)
 
-	testResultFile := pool.ProxyManager.config.confDir + "/pool_checked.conf"
+	testResultFile := pool.ProxyManager.config.confDir + "/pool_checked.list"
 	utils.File_put_contents(testResultFile, []byte(pool.String()))
 }
 
-func (pool *ProxyPool) TestProxyAddActive(proxy_url string) bool {
-	proxy := pool.GetProxy(proxy_url)
+// testProxyAddActive 测试一个代理是否可用 若可用则加入代理池否则删除
+func (pool *ProxyPool) testProxyAddActive(proxyURL string) bool {
+	proxy := pool.getProxy(proxyURL)
 	if proxy == nil {
 		return false
 	}
-	isOk := pool.TestProxy(proxy)
+	isOk := pool.testProxy(proxy)
 	if isOk {
 		pool.addProxyActive(proxy.proxy)
 	} else {
@@ -282,7 +285,7 @@ func (pool *ProxyPool) TestProxyAddActive(proxy_url string) bool {
 	return true
 }
 
-func (pool *ProxyPool) TestProxy(proxy *Proxy) bool {
+func (pool *ProxyPool) testProxy(proxy *Proxy) bool {
 	pool.checkChan <- proxy.proxy
 	start := time.Now()
 	defer (func() {
@@ -293,7 +296,7 @@ func (pool *ProxyPool) TestProxy(proxy *Proxy) bool {
 		return proxy.IsOk()
 	}
 
-	proxy.StatusCode = PROXY_STATUS_UNAVAILABLE
+	proxy.StatusCode = proxyStatusUnavaliable
 
 	testlog := func(msg ...interface{}) {
 		used := time.Now().Sub(start)
@@ -302,19 +305,18 @@ func (pool *ProxyPool) TestProxy(proxy *Proxy) bool {
 		log.Println("test proxy", proxy.proxy, fmt.Sprint(msg...), "used:", proxy.CheckUsed, "ms")
 	}
 
-	if pool.aliveCheckUrl != "" {
-		urlStr := strings.Replace(pool.aliveCheckUrl, "{%rand}", fmt.Sprintf("%d", start.UnixNano()), -1)
+	if pool.aliveCheckURL != "" {
+		urlStr := strings.Replace(pool.aliveCheckURL, "{%rand}", fmt.Sprintf("%d", start.UnixNano()), -1)
 		resp, err := doRequestGet(urlStr, proxy, pool.timeout)
 		if err != nil {
 			testlog("failed,", err.Error())
 			return false
-		} else {
-			cur_len := resp.Header.Get("Content-Length")
-			check_len := pool.aliveCheckResponse.Header.Get("Content-Length")
-			if cur_len != check_len {
-				testlog("failed ,content-length wrong,[", check_len, "!=", cur_len, "]")
-				return false
-			}
+		}
+		curLen := resp.Header.Get("Content-Length")
+		checkLen := pool.aliveCheckResponse.Header.Get("Content-Length")
+		if curLen != checkLen {
+			testlog("failed ,content-length wrong,[", checkLen, "!=", curLen, "]")
+			return false
 		}
 	} else {
 		host, port, err := utils.Net_getHostPortFromUrl(proxy.proxy)
@@ -329,17 +331,19 @@ func (pool *ProxyPool) TestProxy(proxy *Proxy) bool {
 		}
 		conn.Close()
 	}
-	proxy.StatusCode = PROXY_STATUS_ACTIVE
+	proxy.StatusCode = proxyStatusActive
 	proxy.LastCheckOk = time.Now().Unix()
 	testlog("pass")
 	return true
 }
 
-func (pool *ProxyPool) MarkProxyStatus(proxy *Proxy, status PROXY_USED_STATUS) {
+// markProxyStatus 标记一个代理的连接状态
+func (pool *ProxyPool) markProxyStatus(proxy *Proxy, status proxyUsedStatus) {
 	proxy.Count.MarkStatus(status)
 	pool.Count.MarkStatus(status)
 }
 
+// GetProxyNums 返回各种代理的数量 web页面会使用
 func (pool *ProxyPool) GetProxyNums() map[string]int {
 	data := make(map[string]int)
 	data["total"] = len(pool.proxyListAll)
@@ -364,16 +368,16 @@ func (pool *ProxyPool) GetProxyNums() map[string]int {
 	return data
 }
 
-func doRequestGet(urlStr string, proxy *Proxy, timeout_sec int) (resp *http.Response, err error) {
+func doRequestGet(urlStr string, proxy *Proxy, timeoutSec int) (resp *http.Response, err error) {
 	client := &http.Client{}
 	if proxy != nil {
-		client, err = NewClient(proxy.URL, timeout_sec)
+		client, err = newClient(proxy.URL, timeoutSec)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if timeout_sec > 0 {
-		client.Timeout = time.Duration(timeout_sec) * time.Second
+	if timeoutSec > 0 {
+		client.Timeout = time.Duration(timeoutSec) * time.Second
 	}
 	req, _ := http.NewRequest("GET", urlStr, nil)
 	return client.Do(req)
@@ -381,7 +385,7 @@ func doRequestGet(urlStr string, proxy *Proxy, timeout_sec int) (resp *http.Resp
 
 func (pool *ProxyPool) cleanBadProxy(sec int64) {
 	last := time.Now().Unix() - sec
-	proxyBad := make([]*Proxy, 0)
+	var proxyBad []*Proxy
 	for _, proxy := range pool.proxyListAll {
 		if proxy.LastCheckOk < last {
 			proxyBad = append(proxyBad, proxy)

@@ -11,7 +11,7 @@ import (
 
 var proxyAuthorizatonHeader = "Proxy-Authorization"
 
-type User struct {
+type user struct {
 	Name         string
 	Psw          string
 	PswMd5       string
@@ -19,19 +19,19 @@ type User struct {
 	SkipCheckPsw bool
 }
 
-func (user *User) pswEq(psw string) bool {
+func (user *user) pswEq(psw string) bool {
 	return user.PswMd5 == utils.StrMd5(psw)
 }
 
-func (user *User) PswEnc() string {
+func (user *user) PswEnc() string {
 	return utils.StrMd5(fmt.Sprintf("%s:%s", user.Name, user.PswMd5))
 }
-func (user *User) Eq(u *User) bool {
+func (user *user) Eq(u *user) bool {
 	return u != nil && user.Name == u.Name && u.PswMd5 == user.PswMd5
 }
 
-func getAuthorInfo(req *http.Request) *User {
-	defaultInfo := new(User)
+func getAuthorInfo(req *http.Request) *user {
+	defaultInfo := new(user)
 	authheader := strings.SplitN(req.Header.Get(proxyAuthorizatonHeader), " ", 2)
 	if len(authheader) != 2 || authheader[0] != "Basic" {
 		return defaultInfo
@@ -44,28 +44,28 @@ func getAuthorInfo(req *http.Request) *User {
 	if len(userpass) != 2 {
 		return defaultInfo
 	}
-	return &User{Name: userpass[0], PswMd5: utils.StrMd5(userpass[1])}
+	return &user{Name: userpass[0], PswMd5: utils.StrMd5(userpass[1])}
 }
 
-var defaultTestUserName string = "_test_"
+var defaultTestUserName = "_test_"
 
-var defaultTestUser *User = &User{
+var defaultTestUser = &user{
 	Name:   defaultTestUserName,
-	Psw:    fmt.Sprintf("%d", ServerStartTime.UnixNano()),
-	PswMd5: utils.StrMd5(fmt.Sprintf("%d", ServerStartTime.UnixNano())),
+	Psw:    fmt.Sprintf("%d", serverStartTime.UnixNano()),
+	PswMd5: utils.StrMd5(fmt.Sprintf("%d", serverStartTime.UnixNano())),
 }
 
-func loadUsers(confPath string) (users map[string]*User, err error) {
-	users = make(map[string]*User)
+func loadUsers(confPath string) (users map[string]*user, err error) {
+	users = make(map[string]*user)
 	if !utils.File_exists(confPath) {
 		return
 	}
-	userInfo_byte, err := utils.File_get_contents(confPath)
+	userInfoByte, err := utils.File_get_contents(confPath)
 	if err != nil {
 		log.Println("load user file failed:", confPath, err)
 		return
 	}
-	lines := utils.LoadText2SliceMap(string(userInfo_byte))
+	lines := utils.LoadText2SliceMap(string(userInfoByte))
 	for _, line := range lines {
 		name, has := line["name"]
 		if !has || name == "" {
@@ -76,7 +76,7 @@ func loadUsers(confPath string) (users map[string]*User, err error) {
 			continue
 		}
 
-		user := new(User)
+		user := new(user)
 		user.Name = name
 		if val, has := line["is_admin"]; has && (val == "admin" || val == "true") {
 			user.IsAdmin = true
@@ -96,11 +96,11 @@ func loadUsers(confPath string) (users map[string]*User, err error) {
 	return
 }
 
-func (manager *ProxyManager) checkHttpAuth(user *User) bool {
+func (manager *ProxyManager) checkHTTPAuth(user *user) bool {
 	switch manager.config.authType {
-	case AuthType_NO:
+	case AuthTypeNO:
 		return true
-	case AuthType_Basic:
+	case AuthTypeBasic:
 		if u, has := manager.users[user.Name]; has {
 			return u.Eq(user)
 		}
@@ -108,7 +108,7 @@ func (manager *ProxyManager) checkHttpAuth(user *User) bool {
 			return true
 		}
 		return false
-	case AuthType_Basic_WithAny:
+	case AuthTypeBasicWithAny:
 		return user.Name != ""
 	default:
 		return false
