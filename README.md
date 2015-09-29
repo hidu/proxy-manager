@@ -55,7 +55,7 @@ proxy-manager -conf ./conf/proxy.conf
 
 
 ##流程图
-用使用代理来访问 http://www.baidu.com/来做示例：  
+用使用代理来访问 `http://www.baidu.com/` 来做示例：  
 ```
 
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++  
