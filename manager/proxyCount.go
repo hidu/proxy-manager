@@ -27,3 +27,24 @@ func (count *proxyCount) MarkStatus(status proxyUsedStatus) {
 func (count *proxyCount) String() string {
 	return fmt.Sprintf("total:%d,success:%d,failed:%d", count.Total, count.Success, count.Failed)
 }
+
+type NumsCount map[string]int
+
+func newNumsCount() NumsCount {
+	n := make(NumsCount)
+	return n
+}
+
+func (c NumsCount) Add(item string, n int) {
+	if _, has := c[item]; !has {
+		c[item] = 0
+	}
+	c[item] += n
+}
+
+func (c NumsCount) Get(item string) int {
+	if n, has := c[item]; has {
+		return n
+	}
+	return 0
+}

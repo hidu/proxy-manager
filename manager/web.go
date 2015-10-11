@@ -149,6 +149,8 @@ func (manager *ProxyManager) handelLogout(w http.ResponseWriter, req *http.Reque
 	http.SetCookie(w, cookie)
 	http.Redirect(w, req, "/", 302)
 }
+
+// handelTest  测试一个代理是否可以正常使用
 func (manager *ProxyManager) handelTest(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
 	values := ctx.values
 	doPost := func() {

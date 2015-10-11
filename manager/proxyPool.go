@@ -344,26 +344,14 @@ func (pool *ProxyPool) markProxyStatus(proxy *Proxy, status proxyUsedStatus) {
 }
 
 // GetProxyNums 返回各种代理的数量 web页面会使用
-func (pool *ProxyPool) GetProxyNums() map[string]int {
-	data := make(map[string]int)
-	data["total"] = len(pool.proxyListAll)
-	data["active"] = len(pool.proxyListActive)
-	data["active_http"] = 0
-	data["active_socks5"] = 0
-	data["active_socks4"] = 0
-	data["active_socks4a"] = 0
+func (pool *ProxyPool) GetProxyNums() NumsCount {
+	data := newNumsCount()
+	data.Add("total", len(pool.proxyListAll))
+	data.Add("active", len(pool.proxyListActive))
 
 	for _, proxy := range pool.proxyListActive {
-		switch proxy.URL.Scheme {
-		case "http":
-			data["active_http"]++
-		case "socks5":
-			data["active_socks5"]++
-		case "socks4":
-			data["active_socks4"]++
-		case "socks4a":
-			data["active_socks4a"]++
-		}
+		name := fmt.Sprintf("active_%s", proxy.URL.Scheme)
+		data.Add(name, 1)
 	}
 	return data
 }
@@ -379,7 +367,10 @@ func doRequestGet(urlStr string, proxy *Proxy, timeoutSec int) (resp *http.Respo
 	if timeoutSec > 0 {
 		client.Timeout = time.Duration(timeoutSec) * time.Second
 	}
-	req, _ := http.NewRequest("GET", urlStr, nil)
+	req, err := http.NewRequest("GET", urlStr, nil)
+	if err != nil {
+		return nil, err
+	}
 	return client.Do(req)
 }
 

@@ -2,7 +2,7 @@ proxy-manager
 ============
 
 ##概述
-1.  统一管理 http、socks4、socks4a、socks5 代理
+1.  统一管理 http、socks4、socks4a、socks5、shadowsocks 代理
 2.  自动检查代理是否可用
 3.  对外统一提供http代理服务
 4.  对外代理服务支持http basic认证

@@ -38,7 +38,7 @@ A complete example using this package:
 		return
 	}
 */
-package socks 
+package socks
 
 import (
 	"errors"

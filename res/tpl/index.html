@@ -7,12 +7,13 @@
 <table style="width:100%" class="tb_1">
 <caption>status</caption>
   <tr><th width="130px">server start</th> <td>{{.startTime}}</td></tr>
-  <tr><th>proxy total</th> <td>{{.proxy_count.total}}</td></tr>
-  <tr><th>proxy active</th> <td>{{.proxy_count.active}} </td></tr>
-  <tr><th>active_http</th> <td>{{.proxy_count.active_http}}</td></tr>
-  <tr><th>active_socks5</th> <td>{{.proxy_count.active_socks5}}</td></tr>
-  <tr><th>active_socks4</th> <td>{{.proxy_count.active_socks4}}</td></tr>
-  <tr><th>active_socks4a</th> <td>{{.proxy_count.active_socks4a}}</td></tr>
+  <tr><th>proxy total</th> <td>{{.proxy_count.Get "total"}}</td></tr>
+  <tr><th>proxy active</th> <td>{{.proxy_count.Get "active"}} </td></tr>
+  <tr><th>active_http</th> <td>{{.proxy_count.Get "active_http"}}</td></tr>
+  <tr><th>active_socks5</th> <td>{{.proxy_count.Get "active_socks5"}}</td></tr>
+  <tr><th>active_socks4</th> <td>{{.proxy_count.Get "active_socks4"}}</td></tr>
+  <tr><th>active_socks4a</th> <td>{{.proxy_count.Get "active_socks4a"}}</td></tr>
+  <tr><th>active_ss</th> <td>{{.proxy_count.Get "active_ss"}}</td></tr>
   <tr><th>request total</th> <td>{{.proxyReqTotal}}</td></tr>
   <tr><th>request suc</th> <td>{{.proxy_count_suc}}</td></tr>
   <tr><th>request failed</th> <td>{{.proxy_count_failed}}</td></tr>
