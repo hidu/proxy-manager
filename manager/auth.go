@@ -30,6 +30,10 @@ func (user *user) Eq(u *user) bool {
 	return u != nil && user.Name == u.Name && u.PswMd5 == user.PswMd5
 }
 
+func (user *user) String() string {
+	return fmt.Sprint("name:", user.Name, ",psw:", user.Psw, ",pswMd5:", user.PswMd5, ",isAdmin:", user.IsAdmin)
+}
+
 func getAuthorInfo(req *http.Request) *user {
 	defaultInfo := new(user)
 	authheader := strings.SplitN(req.Header.Get(proxyAuthorizatonHeader), " ", 2)
@@ -82,14 +86,18 @@ func loadUsers(confPath string) (users map[string]*user, err error) {
 			user.IsAdmin = true
 		}
 		if val, has := line["psw_md5"]; has {
-			user.PswMd5 = val
+			user.PswMd5 = strings.TrimSpace(val)
 		}
 
 		if user.PswMd5 == "" {
 			if val, has := line["psw"]; has {
-				user.Psw = val
-				user.PswMd5 = utils.StrMd5(val)
+				user.Psw = strings.TrimSpace(val)
+				user.PswMd5 = utils.StrMd5(user.Psw)
 			}
+		}
+		if user.PswMd5 == "" {
+			log.Println("ignore user:", name, "empty passwd")
+			continue
 		}
 		users[user.Name] = user
 	}

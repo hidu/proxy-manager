@@ -20,24 +20,40 @@ type webRequestCtx struct {
 	values  map[string]interface{}
 	user    *user
 	isLogin bool
+	req     *http.Request
+	start   time.Time
+	logMsg  string
 }
 
 func (ctx *webRequestCtx) isAdmin() bool {
 	return ctx.isLogin && ctx != nil && ctx.user.IsAdmin
 }
 
+func (ctx *webRequestCtx) finalLog() {
+	req := ctx.req
+	log.Println(req.RemoteAddr, req.Method, req.RequestURI, "used:", time.Now().Sub(ctx.start), "refer:", req.Referer(), "ua:", req.UserAgent(), "logMsg:", ctx.logMsg)
+}
+
+func (ctx *webRequestCtx) addLogMsg(msg ...interface{}) {
+	if ctx.logMsg != "" {
+		ctx.logMsg += ","
+	}
+	ctx.logMsg += fmt.Sprint(msg...)
+}
+
 func (manager *ProxyManager) serveLocalRequest(w http.ResponseWriter, req *http.Request) {
-	start := time.Now()
-	defer (func() {
-		log.Println(req.RemoteAddr, req.RequestURI, "used:", time.Now().Sub(start))
-	})()
+	ctx := &webRequestCtx{
+		req:   req,
+		start: time.Now(),
+	}
+	defer ctx.finalLog()
 
 	if strings.HasPrefix(req.URL.Path, "/res/") {
 		Assest.HTTPHandler("/").ServeHTTP(w, req)
 		return
 	}
 
-	user, isLogin := manager.handelCheckLogin(req)
+	user, isLogin := manager.handelCheckLogin(req, ctx)
 
 	values := make(map[string]interface{})
 	values["title"] = manager.config.title
@@ -64,11 +80,9 @@ func (manager *ProxyManager) serveLocalRequest(w http.ResponseWriter, req *http.
 	values["proxy_host"] = _host
 	values["proxy_port"] = _port
 
-	ctx := &webRequestCtx{
-		values:  values,
-		user:    user,
-		isLogin: isLogin,
-	}
+	ctx.values = values
+	ctx.user = user
+	ctx.isLogin = isLogin
 
 	funcMap := make(map[string]func(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx))
 
@@ -101,18 +115,24 @@ func (manager *ProxyManager) handelAdd(w http.ResponseWriter, req *http.Request,
 	values := ctx.values
 	doPost := func() {
 		if !ctx.isAdmin() {
+			ctx.addLogMsg("not admin")
 			w.Write([]byte("<script>alert('must admin');</script>"))
-			log.Println("no admin", req.RemoteAddr)
 			return
 		}
+		proxy := req.PostFormValue("proxy")
+		isApi := proxy != ""
+		var proxysTxt string
+		if isApi {
+			proxysTxt = "proxy=" + proxy
+		} else {
+			proxysTxt = req.PostFormValue("proxys")
+		}
 
-		proxysTxt := req.PostFormValue("proxys")
 		txtFile := utils.NewTxtFileFromString(proxysTxt)
-
 		proxys, _ := manager.proxyPool.loadProxysFromTxtFile(txtFile)
 		if len(proxys) == 0 {
+			ctx.addLogMsg("no proxy,form input:[", proxysTxt, "]")
 			w.Write([]byte("<script>alert('no proxy');</script>"))
-			log.Println("no proxy,form input:[", proxysTxt, "]")
 			return
 		}
 		n := 0
@@ -125,6 +145,7 @@ func (manager *ProxyManager) handelAdd(w http.ResponseWriter, req *http.Request,
 			go manager.proxyPool.runTest()
 		}
 		w.Write([]byte(fmt.Sprintf("<script>alert('add %d new proxy');</script>", n)))
+		ctx.addLogMsg("add new proxy total:", n)
 	}
 
 	switch req.Method {
@@ -139,11 +160,13 @@ func (manager *ProxyManager) handelAdd(w http.ResponseWriter, req *http.Request,
 	}
 	http.NotFound(w, req)
 }
+
 func (manager *ProxyManager) handelAbout(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
 	values := ctx.values
 	code := renderHTML("about.html", values, true)
 	w.Write([]byte(code))
 }
+
 func (manager *ProxyManager) handelLogout(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
 	cookie := &http.Cookie{Name: cookieName, Value: "", Path: "/"}
 	http.SetCookie(w, cookie)
@@ -156,20 +179,24 @@ func (manager *ProxyManager) handelTest(w http.ResponseWriter, req *http.Request
 	doPost := func() {
 		token, err := strconv.ParseInt(req.PostFormValue("token"), 10, 64)
 		if err != nil {
+			ctx.addLogMsg("token wrong", err)
 			w.Write([]byte("params wrong"))
 			return
 		}
 		urlStr := strings.TrimSpace(req.PostFormValue(fmt.Sprintf("url_%d", token-manager.startTime.UnixNano())))
 		obj, err := url.Parse(urlStr)
 		if err != nil || obj.Scheme != "http" {
+			ctx.addLogMsg("test url wrong,urlStr=", urlStr)
 			w.Write([]byte(fmt.Sprintf("wrong url [%s],err:%v", urlStr, err)))
 			return
 		}
 		proxyStr := strings.TrimSpace(req.PostFormValue("proxy"))
+		ctx.addLogMsg("test proxy [", proxyStr, "],url [", urlStr, "]")
 
 		if proxyStr != "" {
 			_, err := url.Parse(proxyStr)
 			if err != nil {
+				ctx.addLogMsg("proxy info err:", err)
 				w.Write([]byte(fmt.Sprintf("wrong proxy info [%s],err:%v", proxyStr, err)))
 				return
 			}
@@ -178,6 +205,7 @@ func (manager *ProxyManager) handelTest(w http.ResponseWriter, req *http.Request
 			if err != nil {
 				w.WriteHeader(502)
 				w.Write([]byte(fmt.Sprintf("can not get [%s] via [%s]\nerr:%s", urlStr, proxyStr, err)))
+				ctx.addLogMsg("failed,url=", urlStr, ",err=", err)
 				return
 			}
 			copyHeaders(w.Header(), resp.Header)
@@ -220,7 +248,7 @@ func (manager *ProxyManager) handelLogin(w http.ResponseWriter, req *http.Reques
 		name := req.PostFormValue("name")
 		psw := req.PostFormValue("psw")
 		if user, has := manager.users[name]; has && user.pswEq(psw) {
-			log.Println("login suc,name=", name)
+			ctx.addLogMsg("login suc,name=", name)
 			cookie := &http.Cookie{
 				Name:    cookieName,
 				Value:   fmt.Sprintf("%s:%s", name, user.PswEnc()),
@@ -230,6 +258,7 @@ func (manager *ProxyManager) handelLogin(w http.ResponseWriter, req *http.Reques
 			http.SetCookie(w, cookie)
 			w.Write([]byte("<script>parent.location.href='/'</script>"))
 		} else {
+			ctx.addLogMsg("login failed,name=", name, "psw=", psw)
 			w.Write([]byte("<script>alert('login failed')</script>"))
 		}
 	} else {
@@ -238,9 +267,19 @@ func (manager *ProxyManager) handelLogin(w http.ResponseWriter, req *http.Reques
 	}
 }
 
-func (manager *ProxyManager) handelCheckLogin(req *http.Request) (user *user, isLogin bool) {
+func (manager *ProxyManager) handelCheckLogin(req *http.Request, ctx *webRequestCtx) (user *user, isLogin bool) {
 	if req == nil {
 		return
+	}
+	if req.Method == "POST" {
+		if psw_md5 := req.PostFormValue("psw_md5"); psw_md5 != "" {
+			user_name := req.PostFormValue("user_name")
+			if user, has := manager.users[user_name]; has && user.PswMd5 == psw_md5 {
+				return user, true
+			}
+			ctx.addLogMsg("check login with psw_md5 failed,user_name=[", user_name, "],psw_md5=[", psw_md5, "]")
+			return
+		}
 	}
 	cookie, err := req.Cookie(cookieName)
 	if err != nil {
