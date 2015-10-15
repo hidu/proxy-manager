@@ -10,6 +10,9 @@ proxy-manager
 ##安装
 需要安装[golang](https://golang.org/dl/  "下载安装")
 ```
+export GO15VENDOREXPERIMENT=1
+```
+```
 go get -u github.com/hidu/proxy-manager
 ```
 
