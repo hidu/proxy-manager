@@ -1,5 +1,6 @@
 proxy-manager
 ============
+v0.2  
 
 ##概述
 1.  统一管理 http、socks4、socks4a、socks5、shadowsocks 代理
@@ -8,6 +9,7 @@ proxy-manager
 4.  对外代理服务支持http basic认证
 
 ##安装
+###使用源码安装
 需要安装[golang](https://golang.org/dl/  "下载安装")
 ```
 export GO15VENDOREXPERIMENT=1
@@ -15,6 +17,9 @@ export GO15VENDOREXPERIMENT=1
 ```
 go get -u github.com/hidu/proxy-manager
 ```
+
+###下载二进制文件
+> [网盘下载:windows、linux、darwin版本](http://pan.baidu.com/s/1c0dALWk)
 
 ##配置
 ###初始化配置
