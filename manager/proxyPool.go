@@ -348,8 +348,12 @@ func (pool *ProxyPool) GetProxyNums() NumsCount {
 	data := newNumsCount()
 	data.Add("total", len(pool.proxyListAll))
 	data.Add("active", len(pool.proxyListActive))
-
+	for _type := range proxyTransports {
+		name := fmt.Sprintf("active_%s", _type)
+		data.Add(name, 0)
+	}
 	for _, proxy := range pool.proxyListActive {
+
 		name := fmt.Sprintf("active_%s", proxy.URL.Scheme)
 		data.Add(name, 1)
 	}

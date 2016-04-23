@@ -2,6 +2,7 @@ package manager
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"github.com/hidu/goutils"
 	"io"
@@ -92,6 +93,7 @@ func (manager *ProxyManager) serveLocalRequest(w http.ResponseWriter, req *http.
 	funcMap["/test"] = manager.handelTest
 	funcMap["/login"] = manager.handelLogin
 	funcMap["/logout"] = manager.handelLogout
+	funcMap["/status"] = manager.handelStatus
 
 	if fn, has := funcMap[req.URL.Path]; has {
 		fn(w, req, ctx)
@@ -171,6 +173,19 @@ func (manager *ProxyManager) handelLogout(w http.ResponseWriter, req *http.Reque
 	cookie := &http.Cookie{Name: cookieName, Value: "", Path: "/"}
 	http.SetCookie(w, cookie)
 	http.Redirect(w, req, "/", 302)
+}
+
+func (manager *ProxyManager) handelStatus(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
+	values := make(map[string]interface{})
+	values["start_time"] = manager.startTime.Format(timeFormatStd)
+	values["version"] = GetVersion()
+	values["request"] = manager.proxyPool.Count
+	values["alive_check_url"] = manager.proxyPool.aliveCheckURL
+	values["alive_check_interval"] = manager.proxyPool.checkInterval
+	values["timeout"] = manager.proxyPool.timeout
+	values["proxy_detail"] = manager.proxyPool.GetProxyNums()
+	bs, _ := json.Marshal(values)
+	w.Write(bs)
 }
 
 // handelTest  测试一个代理是否可以正常使用

@@ -6,9 +6,9 @@ import (
 )
 
 type proxyCount struct {
-	Total   int64
-	Success int64
-	Failed  int64
+	Total   int64 `json:"total"`
+	Success int64 `json:"success"`
+	Failed  int64 `json:"failed"`
 }
 
 func newProxyCount() *proxyCount {

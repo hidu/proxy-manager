@@ -1,12 +1,13 @@
 proxy-manager
 ============
-v0.2.1  
+v0.2.2  
 
-##概述
+## 概述
 1.  统一管理 http、socks4、socks4a、socks5、shadowsocks 代理
 2.  自动检查代理是否可用
 3.  对外统一提供http代理服务
 4.  对外代理服务支持http basic认证
+5.  支持通过接口添加代理
 
 ##安装
 ###使用源码安装
@@ -70,7 +71,7 @@ proxy-manager -conf ./conf/proxy.conf
 + client (want visit http://www.baidu.com/)              +  
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++  
                         |  
-                        |  via proxy 127.0.0.1:8090  
+                        |  via proxy 127.0.0.1:8128  
                         |  
                         V  
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++  
@@ -89,3 +90,15 @@ proxy-manager -conf ./conf/proxy.conf
 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++  
 
 ```
+
+
+## 外部接口
+
+### 添加代理接口 
+```
+curl 命令示例：
+curl --data "user_name=admin&psw_md5=7bb483729b5a8e26f73e1831cde5b842&proxy=http://10.0.1.9:3128" http://127.0.0.1:8128/add
+```
+
+### 服务状态接口
+http://127.0.0.1:8128/status
