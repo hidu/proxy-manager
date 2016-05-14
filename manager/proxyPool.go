@@ -266,7 +266,7 @@ func (pool *ProxyPool) runTest() {
 
 	pool.cleanBadProxy(86400)
 
-	testResultFile := pool.ProxyManager.config.confDir + "/pool_checked.list"
+	testResultFile := pool.ProxyManager.config.confDir + "/pool_checked.conf"
 	utils.File_put_contents(testResultFile, []byte(pool.String()))
 }
 

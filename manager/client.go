@@ -64,6 +64,9 @@ func init() {
 			Dial: func(_, addr string) (net.Conn, error) {
 				return ss.Dial(addr, serverAddr, cipher.Copy())
 			},
+//			DialTLS:func(_, addr string) (net.Conn, error) {
+//				return ss.Dial(addr, serverAddr, cipher.Copy())
+//			},
 		}, nil
 	}
 

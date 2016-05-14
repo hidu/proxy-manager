@@ -34,12 +34,14 @@ func NewProyManager(configPath string) *ProxyManager {
 	manager.config = loadConfig(configPath)
 
 	if manager.config == nil {
+		log.Println("parse config failed")
 		os.Exit(1)
 	}
 	setupLog(fmt.Sprintf("%s/%d.log", manager.config.confDir, manager.config.port))
 
 	manager.proxyPool = loadProxyPool(manager)
 	if manager.proxyPool == nil {
+		log.Println("parse proxyPool failed")
 		os.Exit(1)
 	}
 
