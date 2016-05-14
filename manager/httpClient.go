@@ -60,7 +60,18 @@ func newHTTPClient(manager *ProxyManager) *httpClient {
 	return proxy
 }
 
+func _reqFix(req *http.Request){
+	if(req.Method=="CONNECT" && req.URL.Scheme==""){
+		req.URL.Scheme="https";
+	}
+	if(req.URL.Scheme==""){
+		req.URL.Scheme="http";
+	}
+}
+
 func (httpClient *httpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	_reqFix(req)
+	
 	rlog := newRequestLog(req)
 
 	rlog.logID = httpClient.ProxyManager.reqNum + time.Now().Unix()

@@ -1,6 +1,6 @@
 proxy-manager
 ============
-v0.2.2  
+v0.2.3  
 
 ## 概述
 1.  统一管理 http、socks4、socks4a、socks5、shadowsocks 代理

@@ -200,7 +200,7 @@ func (manager *ProxyManager) handelTest(w http.ResponseWriter, req *http.Request
 		}
 		urlStr := strings.TrimSpace(req.PostFormValue(fmt.Sprintf("url_%d", token-manager.startTime.UnixNano())))
 		obj, err := url.Parse(urlStr)
-		if err != nil || obj.Scheme != "http" {
+		if err != nil || !strings.HasPrefix(obj.Scheme, "http") {
 			ctx.addLogMsg("test url wrong,urlStr=", urlStr)
 			w.Write([]byte(fmt.Sprintf("wrong url [%s],err:%v", urlStr, err)))
 			return
