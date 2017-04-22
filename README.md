@@ -9,8 +9,8 @@ v0.2.3
 4.  对外代理服务支持http basic认证
 5.  支持通过接口添加代理
 
-##安装
-###使用源码安装
+## 安装
+### 使用源码安装
 需要安装[golang](https://golang.org/dl/  "下载安装")
 ```
 export GO15VENDOREXPERIMENT=1
@@ -19,15 +19,15 @@ export GO15VENDOREXPERIMENT=1
 go get -u github.com/hidu/proxy-manager
 ```
 
-###下载二进制文件
+### 下载二进制文件
 > [网盘下载:windows、linux、darwin版本](http://pan.baidu.com/s/1c0dALWk)
 
-##配置
-###初始化配置
+## 配置
+### 初始化配置
 ```
 proxy-manager -init_conf ./conf/
 ```
-###配置文件
+### 配置文件
 <table>
 <thead>
  <tr>
@@ -57,13 +57,13 @@ proxy-manager -init_conf ./conf/
 
 
 
-##运行
+## 运行
 ```
 proxy-manager -conf ./conf/proxy.conf
 ```
 
 
-##流程图
+## 流程图
 用使用代理来访问 `http://www.baidu.com/` 来做示例：  
 ```
 
