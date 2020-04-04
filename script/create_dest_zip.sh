@@ -7,7 +7,7 @@ if [ -z "$1" ];then
     bash build.sh windows
 fi
 
-version=$(cat res/version)
+
 
 cd dest
 ################################################
@@ -27,14 +27,14 @@ t=$(date +"%Y%m%d%H")
 rm proxy_man_*.tar.gz proxy_man_*.zip
 
 ################################################
-target_linux="proxy_man_${version}_linux_$t.tar.gz"
+target_linux="proxy_man_linux_$t.tar.gz"
 
 mkdir linux
 cp proxy_man ../script/proxy_control.sh linux/
 cp -r conf linux/conf
 
 
-dir_new="proxy_man_${version}"
+dir_new="proxy_man"
 if [ -d $dir_new ];then
   rm -rf $dir_new
 fi
@@ -45,7 +45,7 @@ tar -czvf $target_linux $dir_new
 rm -rf  $dir_new
 
 ################################################
-target_windows="proxy_man_${version}_windows_$t.zip"
+target_windows="proxy_man_windows_$t.zip"
 
 
 mkdir windows
