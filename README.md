@@ -1,6 +1,6 @@
 proxy-manager
 ============
-v0.2.3  
+v0.3.0
 
 ## 概述
 1.  统一管理 http、https、socks4、socks4a、socks5、shadowsocks 代理
@@ -19,7 +19,7 @@ go install github.com/hidu/proxy-manager@master
 ## 配置
 ### 初始化配置
 ```
-proxy-manager -init_conf ./conf/
+proxy-manager -init_conf
 ```
 ### 配置文件
 <table>
@@ -31,7 +31,7 @@ proxy-manager -init_conf ./conf/
 </thead>
 <tbody>
   <tr>
-    <td>proxy.conf</td>
+    <td>proxy.toml</td>
     <td>主配置文件</td>
   </tr>
   <tr>
@@ -52,8 +52,12 @@ proxy-manager -init_conf ./conf/
 
 
 ## 运行
-```
-proxy-manager -conf ./conf/proxy.conf
+```bash
+proxy-manager
+
+or
+
+proxy-manager -conf ./conf/proxy.toml
 ```
 
 
