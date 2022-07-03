@@ -96,6 +96,7 @@ func (man *ProxyManager) serveLocalRequest(w http.ResponseWriter, req *http.Requ
 	funcMap["/logout"] = man.handelLogout
 	funcMap["/status"] = man.handelStatus
 	funcMap["/query"] = man.handelQuery
+	funcMap["/fetch"] = man.handelFetch
 
 	if fn, has := funcMap[req.URL.Path]; has {
 		fn(w, req, ctx)
@@ -176,6 +177,11 @@ func (man *ProxyManager) handelAbout(w http.ResponseWriter, req *http.Request, c
 func (man *ProxyManager) handelLogout(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
 	cookie := &http.Cookie{Name: cookieName, Value: "", Path: "/"}
 	http.SetCookie(w, cookie)
+	if _, _, ok := req.BasicAuth(); ok {
+		w.WriteHeader(401)
+		w.Write([]byte("<script>location.reload()</script>"))
+		return
+	}
 	http.Redirect(w, req, "/", 302)
 }
 
@@ -290,7 +296,6 @@ func (man *ProxyManager) handelCheckLogin(req *http.Request, ctx *webRequestCtx)
 	if req == nil {
 		return nil, false
 	}
-
 	if u, p, ok := req.BasicAuth(); ok {
 		user = man.getUser(u)
 		if user != nil && user.Password == p {
@@ -343,9 +348,7 @@ func renderHTML(fileName string, values map[string]interface{}, layout bool) str
 
 func (man *ProxyManager) handelQuery(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
 	if !ctx.isLogin {
-		w.Header().Set("Proxy-Authenticate", "Basic realm=auth need")
-		w.WriteHeader(407)
-		w.Write([]byte("proxy auth failed"))
+		notLoginHandler(w, req)
 		return
 	}
 	qs := req.URL.Query()
@@ -382,4 +385,43 @@ func (man *ProxyManager) handelQuery(w http.ResponseWriter, req *http.Request, c
 	request.Header.Del("Authorization")
 
 	man.httpClient.ServeHTTP(w, request)
+}
+
+func (man *ProxyManager) handelFetch(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
+	if !ctx.isLogin {
+		data := map[string]interface{}{
+			"ErrNo": 1,
+			"Proxy": "proxy auth failed",
+		}
+		writeJSON(w, http.StatusBadRequest, data)
+		return
+	}
+	proxy, err := man.proxyPool.getOneProxy(ctx.user.Name)
+	if err != nil {
+		data := map[string]interface{}{
+			"ErrNo":   2,
+			"Message": err.Error(),
+		}
+		writeJSON(w, http.StatusBadGateway, data)
+		return
+	}
+	data := map[string]interface{}{
+		"ErrNo": 0,
+		"Proxy": proxy.proxy,
+	}
+	writeJSON(w, http.StatusOK, data)
+}
+
+func notLoginHandler(w http.ResponseWriter, _ *http.Request) {
+	// w.Header().Set("WWW-authenticate", "Basic realm=auth need")
+	// w.WriteHeader(http.StatusUnauthorized)
+	w.WriteHeader(http.StatusBadRequest)
+	w.Write([]byte("proxy auth failed"))
+}
+
+func writeJSON(w http.ResponseWriter, status int, data interface{}) {
+	bf, _ := json.Marshal(data)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write(bf)
 }

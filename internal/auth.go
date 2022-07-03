@@ -37,7 +37,7 @@ func (u *User) String() string {
 	return string(bf)
 }
 
-func getAuthorInfo(req *http.Request) *User {
+func getProxyAuthorInfo(req *http.Request) *User {
 	defaultInfo := new(User)
 	authHeader := strings.SplitN(req.Header.Get(proxyAuthorizationHeader), " ", 2)
 	if len(authHeader) != 2 || authHeader[0] != "Basic" {

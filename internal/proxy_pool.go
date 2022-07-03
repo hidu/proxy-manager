@@ -221,6 +221,7 @@ var errorNoProxy = fmt.Errorf("no active proxy")
 func (p *ProxyPool) getOneProxy(uname string) (*Proxy, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
 	l := len(p.proxyListActive)
 	if l == 0 {
 		return nil, errorNoProxy

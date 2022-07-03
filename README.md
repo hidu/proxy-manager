@@ -61,38 +61,42 @@ proxy-manager -conf ./conf/proxy.toml
 ```
 
 
-## 流程图
-用使用代理来访问 `http://www.baidu.com/` 来做示例：  
+## 使用流程
+假设服务监听地址为：`127.0.0.1:8128`
+
+### As Proxy Server
+支持访问 http URL，暂不支持 https URL。
+```
+curl -x http://$name:$psw@127.0.0.1:8128 'http://hidu.github.io/hello.md'
 ```
 
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++  
-+ client (want visit http://www.baidu.com/)              +  
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++  
-                        |  
-                        |  via proxy 127.0.0.1:8128  
-                        |  
-                        V  
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++  
-+                       +         proxy pool             +  
-+ proxy manager listen  ++++++++++++++++++++++++++++++++++  
-+ on (127.0.0.1:8090)   +  http_proxy1,http_proxy2,      +  
-+                       +  socks5_proxy1,socks5_proxy2   +  
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++  
-                        |  
-                        |  choose one proxy visit 
-                        |  www.baidu.com  
-                        |  
-                        V  
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++  
-+        site:www.baidu.com                              +  
-++++++++++++++++++++++++++++++++++++++++++++++++++++++++++  
+### As Gateway Server
+支持访问 http 和 https URL 。
+```bash
+# 发送 GET 请求
+curl 'http://$name:$psw@127.0.0.1:8128/query?url=https://hidu.github.io/hello.md
 
+# 发送 POST 请求，并且有设置自定义 Header 以及 Body 
+curl 'http://$name:$psw@127.0.0.1:8128/query?method=POST&url=https://hidu.github.io/hello.md&headers={"a":["a"]}' \
+  -X POST --data "request body"
 ```
 
+获取一个 Proxy
+```bash
+ curl 'http://$name:$psw@127.0.0.1:8128/fetch'
+```
+
+成功的 Response：
+```json
+{
+    "ErrNo": 0,
+    "Proxy": "http://127.0.0.1:8101"
+}
+```
 
 ## 外部接口
 
-### 添加代理接口 
+### 添加代理接口
 ```
 curl 命令示例：
 curl --data "user_name=admin&psw_md5=7bb483729b5a8e26f73e1831cde5b842&proxy=http://10.0.1.9:3128" http://127.0.0.1:8128/add

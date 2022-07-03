@@ -78,7 +78,7 @@ func (hc *httpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	rlog.logID = hc.ProxyManager.reqNum + time.Now().Unix()
 
 	defer rlog.print()
-	user := getAuthorInfo(req)
+	user := getProxyAuthorInfo(req)
 	rlog.setLog("uname", user.Name)
 
 	if ProxyDebug {

@@ -30,7 +30,7 @@ ch = curl_init();
 curl_setopt($ch, CURLOPT_URL, "https://hidu.github.io/hello.md"); 
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, <b>CURLOPT_PROXY</b>,"<font color=blue>{{.proxy_host}}:{{.proxy_port}}</font>");
-curl_setopt($ch, <b>CURLOPT_PROXYUSERPWD</b>,"<font color=blue>name:psw</font>");// if necessary
+curl_setopt($ch, <b>CURLOPT_PROXYUSERPWD</b>,"<font color=blue>$name:$psw</font>"); // if necessary
 $body=curl_exec($ch); 
 curl_close($ch);
 </pre>
@@ -40,10 +40,15 @@ curl -x http://$name:$psw@{{.proxy_host}}:{{.proxy_port}} 'http://hidu.github.io
 </pre>
  
 <p class="h5">2. As Gateway Server</p>
- support http、https url.
- <pre>
+ support http、https URL:
+<pre>
 curl 'http://$name:$psw@{{.proxy_host}}:{{.proxy_port}}/query?url=https://hidu.github.io/hello.md
-  
+ 
 curl 'http://$name:$psw@{{.proxy_host}}:{{.proxy_port}}/query?method=POST&url=https://hidu.github.io/hello.md&headers={"a":["a"]}' \
   -X POST --data "request body"
+</pre>
+
+fetch one proxy:
+ <pre>
+ curl 'http://$name:$psw@{{.proxy_host}}:{{.proxy_port}}/fetch'
 </pre>
