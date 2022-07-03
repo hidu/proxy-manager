@@ -3,7 +3,7 @@ proxy-manager
 v0.2.3  
 
 ## 概述
-1.  统一管理 http、socks4、socks4a、socks5、shadowsocks 代理
+1.  统一管理 http、https、socks4、socks4a、socks5、shadowsocks 代理
 2.  自动检查代理是否可用
 3.  对外统一提供http代理服务
 4.  对外代理服务支持http basic认证
@@ -11,16 +11,10 @@ v0.2.3
 
 ## 安装
 ### 使用源码安装
-需要安装[golang](https://golang.org/dl/  "下载安装")
+需要安装[Go](https://golang.org/dl/  "下载安装")
 ```
-export GO15VENDOREXPERIMENT=1
+go install github.com/hidu/proxy-manager@master
 ```
-```
-go get -u github.com/hidu/proxy-manager
-```
-
-### 下载二进制文件
-> [网盘下载:windows、linux、darwin版本](http://pan.baidu.com/s/1c0dALWk)
 
 ## 配置
 ### 初始化配置

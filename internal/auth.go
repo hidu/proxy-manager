@@ -2,116 +2,106 @@ package internal
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
-	"github.com/hidu/goutils/fs"
-	"github.com/hidu/goutils/str_util"
+	"github.com/fsgo/fsconf"
 )
 
-var proxyAuthorizatonHeader = "Proxy-Authorization"
+const proxyAuthorizationHeader = "Proxy-Authorization"
 
-type user struct {
-	Name         string
-	Psw          string
-	PswMd5       string
-	IsAdmin      bool
-	SkipCheckPsw bool
+type User struct {
+	Name        string
+	Password    string
+	PasswordMd5 string
+	Admin       bool
 }
 
-func (user *user) pswEq(psw string) bool {
-	return user.PswMd5 == str_util.StrMd5(psw)
+func (u *User) pswEq(psw string) bool {
+	return u.PasswordMd5 == StrMd5(psw)
 }
 
-func (user *user) PswEnc() string {
-	return str_util.StrMd5(fmt.Sprintf("%s:%s", user.Name, user.PswMd5))
+func (u *User) PswEnc() string {
+	return StrMd5(fmt.Sprintf("%s:%s", u.Name, u.PasswordMd5))
 }
-func (user *user) Eq(u *user) bool {
-	return u != nil && user.Name == u.Name && u.PswMd5 == user.PswMd5
-}
-
-func (user *user) String() string {
-	return fmt.Sprint("name:", user.Name, ",psw:", user.Psw, ",pswMd5:", user.PswMd5, ",isAdmin:", user.IsAdmin)
+func (u *User) Eq(u1 *User) bool {
+	return u != nil && u.Name == u1.Name && u.PasswordMd5 == u1.PasswordMd5
 }
 
-func getAuthorInfo(req *http.Request) *user {
-	defaultInfo := new(user)
-	authheader := strings.SplitN(req.Header.Get(proxyAuthorizatonHeader), " ", 2)
-	if len(authheader) != 2 || authheader[0] != "Basic" {
+func (u *User) String() string {
+	bf, _ := json.Marshal(u)
+	return string(bf)
+}
+
+func getAuthorInfo(req *http.Request) *User {
+	defaultInfo := new(User)
+	authHeader := strings.SplitN(req.Header.Get(proxyAuthorizationHeader), " ", 2)
+	if len(authHeader) != 2 || authHeader[0] != "Basic" {
 		return defaultInfo
 	}
-	userpassraw, err := base64.StdEncoding.DecodeString(authheader[1])
+	userPassRaw, err := base64.StdEncoding.DecodeString(authHeader[1])
 	if err != nil {
 		return defaultInfo
 	}
-	userpass := strings.SplitN(string(userpassraw), ":", 2)
-	if len(userpass) != 2 {
+	userPass := strings.SplitN(string(userPassRaw), ":", 2)
+	if len(userPass) != 2 {
 		return defaultInfo
 	}
-	return &user{Name: userpass[0], PswMd5: str_util.StrMd5(userpass[1])}
+	return &User{Name: userPass[0], PasswordMd5: StrMd5(userPass[1])}
 }
 
-var defaultTestUserName = "_test_"
+const defaultTestUserName = "_test_"
 
-var defaultTestUser = &user{
-	Name:   defaultTestUserName,
-	Psw:    fmt.Sprintf("%d", serverStartTime.UnixNano()),
-	PswMd5: str_util.StrMd5(fmt.Sprintf("%d", serverStartTime.UnixNano())),
+var defaultTestUser = &User{
+	Name:        defaultTestUserName,
+	Password:    strconv.FormatInt(serverStartTime.UnixNano(), 10),
+	PasswordMd5: StrMd5(strconv.FormatInt(serverStartTime.UnixNano(), 10)),
 }
 
-func loadUsers(confPath string) (users map[string]*user, err error) {
-	users = make(map[string]*user)
-	if !fs.FileExists(confPath) {
-		return
-	}
-	userInfoByte, err := fs.FileGetContents(confPath)
-	if err != nil {
-		log.Println("load user file failed:", confPath, err)
-		return
-	}
-	lines := str_util.LoadText2SliceMap(string(userInfoByte))
-	for _, line := range lines {
-		name, has := line["name"]
-		if !has || name == "" {
-			continue
-		}
-		if _, has := users[name]; has {
-			log.Println("dup name in users:", name, line)
-			continue
-		}
-
-		user := new(user)
-		user.Name = name
-		if val, has := line["is_admin"]; has && (val == "admin" || val == "true") {
-			user.IsAdmin = true
-		}
-		if val, has := line["psw_md5"]; has {
-			user.PswMd5 = strings.TrimSpace(val)
-		}
-
-		if user.PswMd5 == "" {
-			if val, has := line["psw"]; has {
-				user.Psw = strings.TrimSpace(val)
-				user.PswMd5 = str_util.StrMd5(user.Psw)
-			}
-		}
-		if user.PswMd5 == "" {
-			log.Println("ignore user:", name, "empty passwd")
-			continue
-		}
-		users[user.Name] = user
-	}
-	return
+type userConfig struct {
+	Users []*User
 }
 
-func (manager *ProxyManager) checkHTTPAuth(user *user) bool {
-	switch manager.config.authType {
+func loadUsers(confPath string) (users map[string]*User, err error) {
+	var uc *userConfig
+	if err = fsconf.Parse(confPath, &uc); err != nil {
+		return nil, err
+	}
+
+	users = make(map[string]*User, len(uc.Users))
+
+	for i := 0; i < len(uc.Users); i++ {
+		u := uc.Users[i]
+		if len(u.Name) == 0 {
+			continue
+		}
+		if _, has := users[u.Name]; has {
+			log.Println("dup name in users:", u.Name)
+			continue
+		}
+		if len(u.PasswordMd5) == 0 {
+			u.PasswordMd5 = StrMd5(u.Password)
+		}
+		if len(u.PasswordMd5) == 0 {
+			log.Println("ignore User=", u.Name, "with empty password")
+			continue
+		}
+		users[u.Name] = u
+	}
+	return users, nil
+}
+
+func (man *ProxyManager) checkHTTPAuth(user *User) bool {
+	switch man.config.AuthType {
 	case AuthTypeNO:
 		return true
 	case AuthTypeBasic:
-		if u, has := manager.users[user.Name]; has {
+		u := man.getUser(user.Name)
+		if u != nil {
 			return u.Eq(user)
 		}
 		if defaultTestUser.Eq(user) {

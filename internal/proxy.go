@@ -4,23 +4,24 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"time"
 )
 
 type proxyStatus int
 
 const (
-	proxyStatusUnknow proxyStatus = iota
+	proxyStatusUnknown proxyStatus = iota
 	proxyStatusActive
-	proxyStatusUnavaliable
+	proxyStatusUnavailable
 )
 
 func (status proxyStatus) String() string {
 	switch status {
-	case proxyStatusUnknow:
-		return "unknow"
+	case proxyStatusUnknown:
+		return "unknown"
 	case proxyStatusActive:
 		return "active"
-	case proxyStatusUnavaliable:
+	case proxyStatusUnavailable:
 		return "unavailable"
 	}
 	return fmt.Sprintf("unknow status:%d", status)
@@ -49,9 +50,9 @@ type Proxy struct {
 	URL         *url.URL
 	Weight      int
 	StatusCode  proxyStatus
-	CheckUsed   int64 // ms
-	LastCheck   int64
-	LastCheckOk int64
+	CheckUsed   time.Duration //
+	LastCheck   time.Time
+	LastCheckOk time.Time
 	Used        int64
 	Count       *proxyCount
 }
@@ -70,13 +71,13 @@ func newProxy(proxyURL string) *Proxy {
 }
 
 func (proxy *Proxy) String() string {
-	return fmt.Sprintf("proxy=%-40s\tweight=%d\tlast_check=%d\tcheck_used=%d\tstatus=%d\tlast_check_ok=%d",
+	return fmt.Sprintf("proxy=%-40s\tweight=%d\tlast_check=%d\tcheck_used=%s\tstatus=%d\tlast_check_ok=%d",
 		proxy.proxy,
 		proxy.Weight,
-		proxy.LastCheck,
+		proxy.LastCheck.Unix(),
 		proxy.CheckUsed,
 		proxy.StatusCode,
-		proxy.LastCheckOk,
+		proxy.LastCheckOk.Unix(),
 	)
 }
 

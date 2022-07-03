@@ -1,0 +1,30 @@
+<style>
+#test_form th{text-align: right}
+</style>
+
+<br>
+<div class="h6">Test Proxy:</div>
+<form method="post" action="/test" id="test_form" target="_blank">
+<table width="80%">
+<tr>
+<th width="90px"><span style="color:red">*</span>URL:</th>
+<td>
+    <input type="url" name="{{.url_name}}" value="{{.checkURL}}" style="width:85%" class="form-control" required autofocus placeholder="{{.checkURL}}">
+</td>
+</tr>
+<tr>
+<th>Proxy:</th>
+<td>
+    <input type="url" name="proxy" style="width:280px" class="form-control" placeholder="eg: http://uname:psw@10.0.2.2:3218">
+    <span style="color:gray">when empty, will use proxy in pool</span>
+</td>
+</tr>
+<tr>
+<th></th>
+<td style="text-align:center">
+    <input type="submit" value="test" class="btn btn-primary">
+</td>
+</tr>
+</table>
+<input type="hidden" name="token" value="{{.token}}">
+</form>

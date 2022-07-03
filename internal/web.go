@@ -13,8 +13,6 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/hidu/goutils/html_util"
-	utils "github.com/hidu/goutils/net_util"
 	"github.com/hidu/goutils/str_util"
 )
 
@@ -22,7 +20,7 @@ const cookieName = "x-man-proxy"
 
 type webRequestCtx struct {
 	values  map[string]interface{}
-	user    *user
+	user    *User
 	isLogin bool
 	req     *http.Request
 	start   time.Time
@@ -30,7 +28,7 @@ type webRequestCtx struct {
 }
 
 func (ctx *webRequestCtx) isAdmin() bool {
-	return ctx.isLogin && ctx != nil && ctx.user.IsAdmin
+	return ctx.isLogin && ctx != nil && ctx.user.Admin
 }
 
 func (ctx *webRequestCtx) finalLog() {
@@ -45,42 +43,42 @@ func (ctx *webRequestCtx) addLogMsg(msg ...interface{}) {
 	ctx.logMsg += fmt.Sprint(msg...)
 }
 
-func (manager *ProxyManager) serveLocalRequest(w http.ResponseWriter, req *http.Request) {
+func (man *ProxyManager) serveLocalRequest(w http.ResponseWriter, req *http.Request) {
 	ctx := &webRequestCtx{
 		req:   req,
 		start: time.Now(),
 	}
 	defer ctx.finalLog()
 
-	if strings.HasPrefix(req.URL.Path, "/res/") {
-		Asset.HTTPHandler("/").ServeHTTP(w, req)
+	if strings.HasPrefix(req.URL.Path, "/asset/") {
+		http.FileServer(http.FS(files)).ServeHTTP(w, req)
 		return
 	}
 
-	user, isLogin := manager.handelCheckLogin(req, ctx)
+	user, isLogin := man.handelCheckLogin(req, ctx)
 
 	values := make(map[string]interface{})
-	values["title"] = manager.config.title
+	values["title"] = man.config.Title
 	values["subTitle"] = ""
 	values["isLogin"] = isLogin
 
 	if isLogin {
 		values["uname"] = user.Name
-		values["isAdmin"] = user.IsAdmin
+		values["isAdmin"] = user.Admin
 	} else {
 		values["uname"] = ""
 		values["isAdmin"] = false
 	}
 
-	values["startTime"] = manager.startTime.Format(timeFormatStd)
+	values["startTime"] = man.startTime.Format(timeFormatStd)
 	values["version"] = version
-	values["notice"] = manager.config.notice
-	values["port"] = fmt.Sprintf("%d", manager.config.port)
-	values["config"] = manager.config
+	values["notice"] = man.config.Notice
+	values["port"] = strconv.Itoa(man.config.Port)
+	values["Config"] = man.config
 
-	values["proxyReqTotal"] = manager.proxyPool.Count.Total
+	values["proxyReqTotal"] = man.proxyPool.Count.Total
 
-	_host, _port, _ := utils.Net_getHostPortFromReq(req)
+	_host, _port, _ := getHostPortFromReq(req)
 	values["proxy_host"] = _host
 	values["proxy_port"] = _port
 
@@ -90,13 +88,14 @@ func (manager *ProxyManager) serveLocalRequest(w http.ResponseWriter, req *http.
 
 	funcMap := make(map[string]func(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx))
 
-	funcMap["/"] = manager.handelIndex
-	funcMap["/about"] = manager.handelAbout
-	funcMap["/add"] = manager.handelAdd
-	funcMap["/test"] = manager.handelTest
-	funcMap["/login"] = manager.handelLogin
-	funcMap["/logout"] = manager.handelLogout
-	funcMap["/status"] = manager.handelStatus
+	funcMap["/"] = man.handelIndex
+	funcMap["/about"] = man.handelAbout
+	funcMap["/add"] = man.handelAdd
+	funcMap["/test"] = man.handelTest
+	funcMap["/login"] = man.handelLogin
+	funcMap["/logout"] = man.handelLogout
+	funcMap["/status"] = man.handelStatus
+	funcMap["/query"] = man.handelQuery
 
 	if fn, has := funcMap[req.URL.Path]; has {
 		fn(w, req, ctx)
@@ -106,17 +105,19 @@ func (manager *ProxyManager) serveLocalRequest(w http.ResponseWriter, req *http.
 
 }
 
-func (manager *ProxyManager) handelIndex(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
+func (man *ProxyManager) handelIndex(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
 	values := ctx.values
-	values["proxy_count_suc"] = manager.proxyPool.Count.Success
-	values["proxy_count_failed"] = manager.proxyPool.Count.Failed
-	values["proxy_count"] = manager.proxyPool.GetProxyNums()
-	values["proxys"] = manager.proxyPool.proxyListActive
+	count := man.proxyPool.Count.Clone()
+	values["proxy_count_suc"] = count.Success
+	values["proxy_count_failed"] = count.Failed
+	values["proxy_count"] = man.proxyPool.GetProxyNumbers()
+	values["proxies"] = man.proxyPool.ActiveList()
 
 	code := renderHTML("index.html", values, true)
 	w.Write([]byte(code))
 }
-func (manager *ProxyManager) handelAdd(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
+
+func (man *ProxyManager) handelAdd(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
 	values := ctx.values
 	doPost := func() {
 		if !ctx.isAdmin() {
@@ -130,24 +131,24 @@ func (manager *ProxyManager) handelAdd(w http.ResponseWriter, req *http.Request,
 		if isApi {
 			proxysTxt = "proxy=" + proxy
 		} else {
-			proxysTxt = req.PostFormValue("proxys")
+			proxysTxt = req.PostFormValue("proxies")
 		}
 
 		txtFile := str_util.NewTxtFileFromString(proxysTxt)
-		proxys, _ := manager.proxyPool.loadProxysFromTxtFile(txtFile)
+		proxys, _ := man.proxyPool.loadProxiesFromTxtFile(txtFile)
 		if len(proxys) == 0 {
-			ctx.addLogMsg("no proxy,form input:[", proxysTxt, "]")
+			ctx.addLogMsg("no proxy, form input:[", proxysTxt, "]")
 			w.Write([]byte("<script>alert('no proxy');</script>"))
 			return
 		}
 		n := 0
 		for _, proxy := range proxys {
-			if manager.proxyPool.addProxy(proxy) {
+			if man.proxyPool.addProxy(proxy) {
 				n++
 			}
 		}
 		if n > 0 {
-			go manager.proxyPool.runTest()
+			go man.proxyPool.runTest()
 		}
 		w.Write([]byte(fmt.Sprintf("<script>alert('add %d new proxy');</script>", n)))
 		ctx.addLogMsg("add new proxy total:", n)
@@ -166,50 +167,50 @@ func (manager *ProxyManager) handelAdd(w http.ResponseWriter, req *http.Request,
 	http.NotFound(w, req)
 }
 
-func (manager *ProxyManager) handelAbout(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
+func (man *ProxyManager) handelAbout(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
 	values := ctx.values
 	code := renderHTML("about.html", values, true)
 	w.Write([]byte(code))
 }
 
-func (manager *ProxyManager) handelLogout(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
+func (man *ProxyManager) handelLogout(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
 	cookie := &http.Cookie{Name: cookieName, Value: "", Path: "/"}
 	http.SetCookie(w, cookie)
 	http.Redirect(w, req, "/", 302)
 }
 
-func (manager *ProxyManager) handelStatus(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
+func (man *ProxyManager) handelStatus(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
 	values := make(map[string]interface{})
-	values["start_time"] = manager.startTime.Format(timeFormatStd)
-	values["version"] = version
-	values["request"] = manager.proxyPool.Count
-	values["alive_check_url"] = manager.proxyPool.aliveCheckURL
-	values["alive_check_interval"] = manager.proxyPool.checkInterval
-	values["timeout"] = manager.proxyPool.timeout
-	values["proxy_detail"] = manager.proxyPool.GetProxyNums()
+	values["StartTime"] = man.startTime.Format(timeFormatStd)
+	values["Version"] = version
+	values["Request"] = man.proxyPool.Count
+	values["AliveCheckURL"] = man.config.AliveCheckURL
+	values["AliveCheckInterval"] = man.config.getCheckInterval().String()
+	values["Timeout"] = man.proxyPool.config.getTimeout().String()
+	values["ProxyDetail"] = man.proxyPool.GetProxyNumbers()
 	bs, _ := json.Marshal(values)
 	w.Write(bs)
 }
 
 // handelTest  测试一个代理是否可以正常使用
-func (manager *ProxyManager) handelTest(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
+func (man *ProxyManager) handelTest(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
 	values := ctx.values
 	doPost := func() {
 		token, err := strconv.ParseInt(req.PostFormValue("token"), 10, 64)
 		if err != nil {
-			ctx.addLogMsg("token wrong", err)
-			w.Write([]byte("params wrong"))
+			ctx.addLogMsg("invalid token", err)
+			w.Write([]byte("invalid token"))
 			return
 		}
-		urlStr := strings.TrimSpace(req.PostFormValue(fmt.Sprintf("url_%d", token-manager.startTime.UnixNano())))
+		urlStr := strings.TrimSpace(req.PostFormValue(fmt.Sprintf("url_%d", token-man.startTime.UnixNano())))
 		obj, err := url.Parse(urlStr)
 		if err != nil || !strings.HasPrefix(obj.Scheme, "http") {
-			ctx.addLogMsg("test url wrong,urlStr=", urlStr)
-			w.Write([]byte(fmt.Sprintf("wrong url [%s],err:%v", urlStr, err)))
+			ctx.addLogMsg("test with invalid url:", urlStr)
+			w.Write([]byte(fmt.Sprintf("invalid url [%s], err:%v", urlStr, err)))
 			return
 		}
 		proxyStr := strings.TrimSpace(req.PostFormValue("proxy"))
-		ctx.addLogMsg("test proxy [", proxyStr, "],url [", urlStr, "]")
+		ctx.addLogMsg("test proxy [", proxyStr, "], url [", urlStr, "]")
 
 		if proxyStr != "" {
 			_, err := url.Parse(proxyStr)
@@ -219,11 +220,11 @@ func (manager *ProxyManager) handelTest(w http.ResponseWriter, req *http.Request
 				return
 			}
 			proxy := newProxy(proxyStr)
-			resp, err := doRequestGet(urlStr, proxy, 5)
+			resp, err := doRequestGet(urlStr, proxy, man.config.getTimeout())
 			if err != nil {
 				w.WriteHeader(502)
 				w.Write([]byte(fmt.Sprintf("can not get [%s] via [%s]\nerr:%s", urlStr, proxyStr, err)))
-				ctx.addLogMsg("failed,url=", urlStr, ",err=", err)
+				ctx.addLogMsg("failed, url=", urlStr, ",err=", err)
 				return
 			}
 			copyHeaders(w.Header(), resp.Header)
@@ -233,11 +234,11 @@ func (manager *ProxyManager) handelTest(w http.ResponseWriter, req *http.Request
 
 		} else {
 			reqTest, _ := http.NewRequest("GET", urlStr, nil)
-			reqTest.SetBasicAuth(defaultTestUser.Name, defaultTestUser.Psw)
-			reqTest.Header.Set(proxyAuthorizatonHeader, reqTest.Header.Get("Authorization"))
+			reqTest.SetBasicAuth(defaultTestUser.Name, defaultTestUser.Password)
+			reqTest.Header.Set(proxyAuthorizationHeader, reqTest.Header.Get("Authorization"))
 			reqTest.Header.Del("Authorization")
 
-			manager.httpClient.ServeHTTP(w, reqTest)
+			man.httpClient.ServeHTTP(w, reqTest)
 		}
 
 	}
@@ -246,8 +247,8 @@ func (manager *ProxyManager) handelTest(w http.ResponseWriter, req *http.Request
 	case "GET":
 		nowInt := time.Now().UnixNano()
 		values["url_name"] = fmt.Sprintf("url_%d", nowInt)
-
-		values["token"] = fmt.Sprintf("%d", manager.startTime.UnixNano()+nowInt)
+		values["checkURL"] = man.config.getAliveCheckURL()
+		values["token"] = strconv.FormatInt(man.startTime.UnixNano()+nowInt, 10)
 
 		code := renderHTML("test.html", values, true)
 		w.Write([]byte(code))
@@ -260,12 +261,12 @@ func (manager *ProxyManager) handelTest(w http.ResponseWriter, req *http.Request
 	http.NotFound(w, req)
 }
 
-func (manager *ProxyManager) handelLogin(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
+func (man *ProxyManager) handelLogin(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
 	values := ctx.values
 	if req.Method == "POST" {
 		name := req.PostFormValue("name")
 		psw := req.PostFormValue("psw")
-		if user, has := manager.users[name]; has && user.pswEq(psw) {
+		if user, has := man.users[name]; has && user.pswEq(psw) {
 			ctx.addLogMsg("login suc,name=", name)
 			cookie := &http.Cookie{
 				Name:    cookieName,
@@ -285,51 +286,49 @@ func (manager *ProxyManager) handelLogin(w http.ResponseWriter, req *http.Reques
 	}
 }
 
-func (manager *ProxyManager) handelCheckLogin(req *http.Request, ctx *webRequestCtx) (user *user, isLogin bool) {
+func (man *ProxyManager) handelCheckLogin(req *http.Request, ctx *webRequestCtx) (user *User, isLogin bool) {
 	if req == nil {
-		return
+		return nil, false
 	}
+
+	if u, p, ok := req.BasicAuth(); ok {
+		user = man.getUser(u)
+		if user != nil && user.Password == p {
+			return user, true
+		}
+		return nil, false
+	}
+
 	if req.Method == "POST" {
-		if psw_md5 := req.PostFormValue("psw_md5"); psw_md5 != "" {
-			user_name := req.PostFormValue("user_name")
-			if user, has := manager.users[user_name]; has && user.PswMd5 == psw_md5 {
+		if pswMd5 := req.PostFormValue("psw_md5"); pswMd5 != "" {
+			userName := req.PostFormValue("user_name")
+			user = man.getUser(userName)
+			if user != nil && user.PasswordMd5 == pswMd5 {
 				return user, true
 			}
-			ctx.addLogMsg("check login with psw_md5 failed,user_name=[", user_name, "],psw_md5=[", psw_md5, "]")
-			return
+			ctx.addLogMsg("check login with psw_md5 failed, user_name=[", userName, "],psw_md5=[", pswMd5, "]")
+			return nil, false
 		}
 	}
 	cookie, err := req.Cookie(cookieName)
 	if err != nil {
-		return
+		return nil, false
 	}
 	info := strings.SplitN(cookie.Value, ":", 2)
 	if len(info) != 2 {
-		return
+		return nil, false
 	}
-	if user, has := manager.users[info[0]]; has && user.PswEnc() == info[1] {
+	user = man.getUser(info[0])
+	if user != nil && user.PswEnc() == info[1] {
 		return user, true
 	}
-	return
+	return nil, false
 }
 
 func renderHTML(fileName string, values map[string]interface{}, layout bool) string {
-	// 	html := resource.DefaultResource.Load("/res/tpl/" + fileName)
-	html := Asset.GetContent("/res/tpl/" + fileName)
-	myfn := template.FuncMap{
-		"shortTime": func(tu int64) string {
-			t := time.Unix(tu, 0)
-			return t.Format(timeFormatStd)
-		},
-		"myNum": func(n int64) string {
-			if n == 0 {
-				return ""
-			}
-			return fmt.Sprintf("%d", n)
-		},
-	}
-
-	tpl, _ := template.New("page").Funcs(myfn).Parse(string(html))
+	html := AssetGetContent("tpl/" + fileName)
+	myFn := template.FuncMap{}
+	tpl, _ := template.New("page").Funcs(myFn).Parse(string(html))
 
 	var bf []byte
 	w := bytes.NewBuffer(bf)
@@ -339,5 +338,48 @@ func renderHTML(fileName string, values map[string]interface{}, layout bool) str
 		values["body"] = body
 		return renderHTML("layout.html", values, false)
 	}
-	return html_util.ReduceHTMLSpace(body)
+	return body
+}
+
+func (man *ProxyManager) handelQuery(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
+	if !ctx.isLogin {
+		w.Header().Set("Proxy-Authenticate", "Basic realm=auth need")
+		w.WriteHeader(407)
+		w.Write([]byte("proxy auth failed"))
+		return
+	}
+	qs := req.URL.Query()
+	queryURL := qs.Get("url")
+	if len(queryURL) == 0 {
+		w.WriteHeader(400)
+		w.Write([]byte("url param is required"))
+		return
+	}
+	method := qs.Get("method")
+	if len(method) == 0 {
+		method = http.MethodGet
+	}
+	request, err := http.NewRequest(method, queryURL, req.Body)
+	if err != nil {
+		w.WriteHeader(400)
+		w.Write([]byte("build request failed: " + err.Error()))
+		return
+	}
+
+	headers := qs.Get("headers")
+	if len(headers) > 0 {
+		var hs http.Header
+		if err = json.Unmarshal([]byte(headers), &hs); err != nil {
+			w.WriteHeader(400)
+			w.Write([]byte("parser headers failed: " + err.Error()))
+			return
+		}
+		request.Header = hs
+	}
+
+	request.SetBasicAuth(defaultTestUser.Name, defaultTestUser.Password)
+	request.Header.Set(proxyAuthorizationHeader, request.Header.Get("Authorization"))
+	request.Header.Del("Authorization")
+
+	man.httpClient.ServeHTTP(w, request)
 }

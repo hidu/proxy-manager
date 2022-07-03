@@ -2,87 +2,220 @@ package internal
 
 import (
 	"fmt"
-	"net"
+	"io"
+	"log"
 	"net/http"
-	"net/url"
+	"net/http/httputil"
+	"strconv"
 	"strings"
 	"time"
-
-	ss "github.com/shadowsocks/shadowsocks-go/shadowsocks"
-	"golang.org/x/net/proxy"
-	"h12.io/socks"
 )
 
-var proxyTransports = make(map[string]func(proxyUrl *url.URL) (*http.Transport, error))
-
-func init() {
-
-	proxyTransports["http"] = func(proxyURL *url.URL) (*http.Transport, error) {
-		return &http.Transport{
-			Proxy: func(req *http.Request) (*url.URL, error) {
-				return proxyURL, nil
-			},
-		}, nil
-	}
-
-	proxyTransports["socks5"] = func(proxyURL *url.URL) (*http.Transport, error) {
-		ph, err := proxy.FromURL(proxyURL, proxy.Direct)
-		if err != nil {
-			return nil, err
-		}
-		return &http.Transport{
-			Dial: ph.Dial,
-		}, nil
-	}
-
-	proxyTransports["socks4"] = func(proxyURL *url.URL) (*http.Transport, error) {
-		dialSocksProxy := socks.DialSocksProxy(socks.SOCKS4A, proxyURL.Host)
-		return &http.Transport{
-			Dial: dialSocksProxy,
-		}, nil
-	}
-
-	proxyTransports["socks4a"] = func(proxyURL *url.URL) (*http.Transport, error) {
-		dialSocksProxy := socks.DialSocksProxy(socks.SOCKS4A, proxyURL.Host)
-		return &http.Transport{
-			Dial: dialSocksProxy,
-		}, nil
-	}
-
-	// shadowsocks
-	proxyTransports["ss"] = func(proxyURL *url.URL) (*http.Transport, error) {
-		if proxyURL.User == nil {
-			return nil, fmt.Errorf("wrong shadowsocks uri,need method and passwd")
-		}
-		psw, _ := proxyURL.User.Password()
-		cipher, err := ss.NewCipher(proxyURL.User.Username(), psw)
-		if err != nil {
-			return nil, err
-		}
-		serverAddr := proxyURL.Host
-		return &http.Transport{
-			Dial: func(_, addr string) (net.Conn, error) {
-				return ss.Dial(addr, serverAddr, cipher.Copy())
-			},
-			// 			DialTLS:func(_, addr string) (net.Conn, error) {
-			// 				return ss.Dial(addr, serverAddr, cipher.Copy())
-			// 			},
-		}, nil
-	}
-
+type requestLog struct {
+	data      []string
+	logData   []string
+	startTime time.Time
+	req       *http.Request
+	logID     int64
 }
 
-func newClient(proxyURL *url.URL, timeout int) (*http.Client, error) {
-	client := &http.Client{}
-	client.Timeout = time.Duration(timeout) * time.Second
+func newRequestLog(req *http.Request) *requestLog {
+	rlog := &requestLog{req: req}
+	rlog.reset()
+	return rlog
+}
 
-	if transFn, has := proxyTransports[strings.ToLower(proxyURL.Scheme)]; has {
-		tr, err := transFn(proxyURL)
-		if err != nil {
-			return nil, err
-		}
-		client.Transport = tr
-		return client, nil
+func (rlog *requestLog) print() {
+	if len(rlog.logData) == 0 {
+		return
 	}
-	return nil, fmt.Errorf("unknow proxy scheme:%s", proxyURL.Scheme)
+	used := time.Now().Sub(rlog.startTime)
+	log.Println("logID:", rlog.logID,
+		rlog.req.Method, rlog.req.URL.String(),
+		strings.Join(rlog.data, " "),
+		strings.Join(rlog.logData, " "),
+		"used:", used.String())
+	rlog.reset()
+}
+
+func (rlog *requestLog) setLog(arg ...interface{}) {
+	rlog.data = append(rlog.logData, fmt.Sprint(arg))
+}
+func (rlog *requestLog) addLog(arg ...interface{}) {
+	rlog.logData = append(rlog.logData, fmt.Sprint(arg))
+}
+func (rlog *requestLog) reset() {
+	rlog.startTime = time.Now()
+	rlog.logData = []string{}
+}
+
+type httpClient struct {
+	ProxyManager *ProxyManager
+}
+
+func newHTTPClient(manager *ProxyManager) *httpClient {
+	log.Println("loading http client...")
+	proxy := new(httpClient)
+	proxy.ProxyManager = manager
+
+	return proxy
+}
+
+func _reqFix(req *http.Request) {
+	if req.Method == "CONNECT" && req.URL.Scheme == "" {
+		req.URL.Scheme = "https"
+	}
+	if req.URL.Scheme == "" {
+		req.URL.Scheme = "http"
+	}
+}
+
+func (hc *httpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	_reqFix(req)
+
+	rlog := newRequestLog(req)
+
+	rlog.logID = hc.ProxyManager.reqNum + time.Now().Unix()
+
+	defer rlog.print()
+	user := getAuthorInfo(req)
+	rlog.setLog("uname", user.Name)
+
+	if ProxyDebug {
+		dump, _ := httputil.DumpRequest(req, true)
+		log.Println("request dump:\n", string(dump))
+	}
+
+	if !hc.ProxyManager.checkHTTPAuth(user) {
+		rlog.addLog("auth", "failed")
+		w.Header().Set("Proxy-Authenticate", "Basic realm=auth need")
+		w.WriteHeader(407)
+		w.Write([]byte("proxy auth failed"))
+		return
+	}
+
+	req.RequestURI = ""
+	req.Header.Del("Connection")
+	req.Header.Del("Proxy-Connection")
+	req.Header.Del("Proxy-Authorization")
+
+	_statusOk := strings.Split(req.Header.Get("X-Man-Status-Ok"), ",")
+	statusOk := make(map[int]int)
+	for _, v := range _statusOk {
+		_code, _ := strconv.Atoi(v)
+		if _code > 0 {
+			statusOk[_code] = 1
+		}
+	}
+	_clientReTry := -1
+	xManRetry := req.Header.Get("X-Man-ReTry")
+	if xManRetry != "" {
+		_clientReTry, _ = strconv.Atoi(xManRetry)
+	}
+
+	for k := range req.Header {
+		k = strings.ToLower(k)
+		if strings.HasPrefix(k, "x-man") || strings.HasPrefix(k, "proxy-") {
+			req.Header.Del(k)
+		}
+	}
+	if req.Body != nil {
+		defer req.Body.Close()
+	}
+
+	var resp *http.Response
+	var err error
+
+	maxReTry := hc.ProxyManager.config.getReTry() + 1
+	if _clientReTry >= 0 && _clientReTry <= hc.ProxyManager.config.ReTryMax {
+		maxReTry = _clientReTry + 1
+	}
+	no := 1
+	for ; no <= maxReTry; no++ {
+		rlog.addLog("try", fmt.Sprintf("%d/%d", no, maxReTry))
+		proxy, err := hc.ProxyManager.proxyPool.getOneProxy(user.Name)
+		if err != nil {
+			rlog.addLog("get_proxy_failed", err)
+			rlog.print()
+			break
+		}
+		rlog.addLog("proxy", proxy.proxy)
+		rlog.addLog("proxyUsed", proxy.Used)
+		client, err := newClient(proxy.URL, hc.ProxyManager.config.getTimeout())
+		if err != nil {
+			rlog.addLog("get http client failed", err)
+			continue
+		}
+		resp, err = client.Do(req)
+		if err == nil {
+			if ProxyDebug {
+				dump, _ := httputil.DumpResponse(resp, true)
+				log.Println("response dump:\n", string(dump))
+			}
+			if hc.ProxyManager.config.IsWrongCode(resp.StatusCode) {
+				rlog.addLog("statusCode wrong def in conf", resp.StatusCode)
+				goto failed
+			}
+			if len(statusOk) != 0 {
+				if _, has := statusOk[resp.StatusCode]; !has {
+					rlog.addLog("statusCode wrong", resp.StatusCode)
+					goto failed
+				}
+			}
+			hc.ProxyManager.proxyPool.markProxyStatus(proxy, proxyUsedSuc)
+			break
+		} else {
+			rlog.addLog("response error", err.Error())
+		}
+
+	failed:
+		{
+			hc.ProxyManager.proxyPool.markProxyStatus(proxy, proxyUsedFailed)
+			rlog.addLog("failed")
+			if no == maxReTry {
+				rlog.addLog("all failed")
+			}
+			rlog.print()
+		}
+	}
+
+	w.Header().Set("x-man-try", fmt.Sprintf("%d/%d", no, maxReTry))
+	w.Header().Set("x-man-id", fmt.Sprintf("%d", rlog.logID))
+
+	if err != nil || resp == nil {
+		w.WriteHeader(550)
+		w.Write([]byte("all failed," + fmt.Sprintf("try:%d", no)))
+		return
+	}
+	log.Println("resp.Header:", resp.Header)
+
+	resp.Header.Del("Content-Length")
+	resp.Header.Del("Connection")
+
+	w.WriteHeader(resp.StatusCode)
+	rlog.addLog("status:", resp.StatusCode)
+
+	copyHeaders(w.Header(), resp.Header)
+	n, err := io.Copy(w, resp.Body)
+	rlog.addLog("res_len:", n)
+	if err != nil {
+		// client may be not read the body
+		rlog.addLog("io.copy_err:", err)
+	}
+
+	if err := resp.Body.Close(); err != nil {
+		rlog.addLog("close response body err:", err)
+	}
+	rlog.addLog("OK")
+}
+
+func copyHeaders(dst, src http.Header) {
+	for k, vs := range src {
+		if len(k) > 5 && k[:6] == "Proxy-" {
+			continue
+		}
+		for _, v := range vs {
+			dst.Add(k, v)
+		}
+	}
 }

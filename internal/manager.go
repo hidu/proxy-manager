@@ -2,117 +2,139 @@ package internal
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
 	"os"
+	"path/filepath"
+	"sync"
 	"time"
 
-	"github.com/hidu/goutils/fs"
-	"github.com/hidu/goutils/net_util"
-	"github.com/hidu/goutils/time_util"
+	"github.com/fsgo/fsenv"
+	"github.com/fsgo/fsgo/fsfs"
 )
 
 // ProxyDebug 是否debug
-var ProxyDebug = false
+var ProxyDebug = os.Getenv("ProxyManagerDebug") == "true"
 
 // ProxyManager manager server
 type ProxyManager struct {
 	httpClient *httpClient
-	config     *config
+	config     *Config
 	proxyPool  *ProxyPool
 	reqNum     int64
 	startTime  time.Time
-	users      map[string]*user
+	users      map[string]*User
+	mux        sync.RWMutex
 }
 
-// NewProyManager init server
-func NewProyManager(configPath string) *ProxyManager {
-	log.Println("loading...")
+func init() {
 	rand.Seed(time.Now().UnixNano())
-	manager := &ProxyManager{}
-	manager.startTime = time.Now()
-	manager.reqNum = 0
-	manager.config = loadConfig(configPath)
+}
 
-	if manager.config == nil {
-		log.Println("parse config failed")
-		os.Exit(1)
+// NewProxyManager init server
+func NewProxyManager(configPath string) *ProxyManager {
+	log.Println("starting...")
+	cfg, err := loadConfig(configPath)
+	if err != nil {
+		log.Fatalln("parse Config failed:", err)
 	}
-	setupLog(fmt.Sprintf("%s/%d.log", manager.config.confDir, manager.config.port))
 
-	manager.proxyPool = loadProxyPool(manager)
+	setEnv(configPath)
+	setupLog(filepath.Join(fsenv.LogRootDir(), "proxy.log"))
+
+	manager := &ProxyManager{
+		startTime: time.Now(),
+		config:    cfg,
+	}
+	manager.proxyPool = loadPool(cfg)
 	if manager.proxyPool == nil {
-		log.Println("parse proxyPool failed")
-		os.Exit(1)
+		log.Fatalln("parse proxyPool failed")
 	}
 
 	manager.loadUsers()
-
-	time_util.SetInterval(func() {
+	SetInterval(func() {
 		manager.loadUsers()
-	}, 300)
+	}, 300*time.Second)
 
 	manager.httpClient = newHTTPClient(manager)
 	return manager
 }
 
+func setEnv(cfp string) {
+	abs, err := filepath.Abs(cfp)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	confDir := filepath.Dir(abs)
+	fsenv.SetConfRootDir(confDir)
+	rootDir := filepath.Dir(confDir)
+	fsenv.SetRootDir(rootDir)
+}
+
 // Start start server
-func (manager *ProxyManager) Start() {
-	addr := fmt.Sprintf("%s:%d", "", manager.config.port)
-	fmt.Println("start proxy manager at:", addr)
-	err := http.ListenAndServe(addr, manager)
-	log.Println(err)
+func (man *ProxyManager) Start() {
+	addr := fmt.Sprintf("%s:%d", "", man.config.Port)
+	log.Println("start proxy man at:", addr)
+	err := http.ListenAndServe(addr, man)
+	log.Println("proxy server exit:", err)
 }
 
 // ServeHTTP ServeHTTP
-func (manager *ProxyManager) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	host, portInt, err := utils.Net_getHostPortFromReq(req)
+func (man *ProxyManager) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	host, portInt, err := getHostPortFromReq(req)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("bad request"))
-		log.Println("bad request,err", err)
+		log.Println("bad request, err:", err)
 		return
 	}
-	// 	atomic.AddInt64(&(manager.reqNum), 1)
 
-	isLocalReq := portInt == manager.config.port
+	isLocalReq := portInt == man.config.Port
 
 	if isLocalReq {
-		isLocalReq = utils.Net_isLocalIp(host)
+		isLocalReq = isLocalIP(host)
 	}
 
 	if isLocalReq {
-		manager.serveLocalRequest(w, req)
+		man.serveLocalRequest(w, req)
 	} else {
-		manager.httpClient.ServeHTTP(w, req)
+		man.httpClient.ServeHTTP(w, req)
 	}
 }
 
-func (manager *ProxyManager) loadUsers() {
-	var err error
-	manager.users, err = loadUsers(manager.config.confDir + "/users")
+func (man *ProxyManager) loadUsers() {
+	users, err := loadUsers(filepath.Join(fsenv.ConfRootDir(), "users.toml"))
 	if err != nil {
 		log.Println("loadUsers err:", err)
-	} else {
-		log.Println("loadUsers suc,total:", len(manager.users))
+		return
 	}
+	log.Println("loadUsers success, total:", len(users))
+	man.mux.Lock()
+	man.users = users
+	man.mux.Unlock()
+}
 
+func (man *ProxyManager) getUser(name string) *User {
+	man.mux.RLock()
+	defer man.mux.RUnlock()
+	if len(man.users) == 0 {
+		return nil
+	}
+	return man.users[name]
 }
 
 func setupLog(logPath string) {
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
-	if err != nil {
-		log.Println("create log file failed [", logPath, "]", err)
-		os.Exit(2)
+	f := &fsfs.Rotator{
+		Path:    logPath,
+		ExtRule: "1hour",
 	}
-	log.SetOutput(logFile)
-
-	time_util.SetInterval(func() {
-		if !fs.FileExists(logPath) {
-			logFile.Close()
-			logFile, _ = os.OpenFile(logPath, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0644)
-			log.SetOutput(logFile)
-		}
-	}, 30)
+	defer f.Close()
+	if err := f.Init(); err != nil {
+		log.Fatalln("setup logfile failed, path=", logPath, "err=", err)
+	}
+	log.Println("setup logfile with", logPath)
+	mw := io.MultiWriter(os.Stderr, f)
+	log.SetOutput(mw)
 }

@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-var version = "0.2.2020040420"
+var version = "0.3.20220702"
 
 var serverStartTime = time.Now()
 

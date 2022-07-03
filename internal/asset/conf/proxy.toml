@@ -1,0 +1,29 @@
+Title=""
+
+Notice="这个是公告，o(∩∩)o...哈哈"
+
+# 端口号
+Port = 8128
+
+# 超时时间 单位 秒
+Timeout =6
+
+# 默认重试次数
+ReTry = 2
+
+# 最大重试次数,由客户端通过http header [X-Man-Retry]指定
+ReTryMax=10
+
+
+# 探活检查的 URL 地址
+AliveCheckURL="https://hidu.github.io/hello.md?_t={%rand}"
+
+# 检测代理有效的间隔时间
+CheckInterval=7200
+
+# 服务认证方式
+# options:{none : 无认证,  basic:HTTP Basic, basic_any: 任意帐号}
+AuthType="basic"
+
+# 探活时的不正确 status
+WrongStatusCode=[403]

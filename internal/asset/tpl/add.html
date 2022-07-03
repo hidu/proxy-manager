@@ -6,15 +6,15 @@
 <table width="100%" id="configTable">
 <tr>
 <td valign="top" style="width:61.8%">
-<b>add new proxy:</b>
+<b>Add new proxy:</b>
 <form  method="post" action="/add" autocomplete="off" target="ifr_form">
-<textarea style="width:100%;height:200px" name="proxys"></textarea>
+<textarea style="width:100%;height:200px" name="proxies"></textarea>
 
 <div style="text-align:center">
 {{if .isAdmin}}
 <input type="submit" class="btn btn-primary" value="add">
 {{else}}
-  admin need
+    <input type="button" class="btn btn-primary" value="only admin user can submit" disabled>
 {{end}}
 </div>
 </form>

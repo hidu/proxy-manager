@@ -1,17 +1,16 @@
 package main
 
-//go:generate goasset
-
 import (
 	"flag"
 	"fmt"
 	"log"
+	"path/filepath"
 
 	"github.com/hidu/proxy-manager/internal"
 )
 
-var configPath = flag.String("conf", "./conf/proxy.conf", "proxy's config file")
-var initConf = flag.String("init_conf", "", "[conf dir] init conf if not exists")
+var configPath = flag.String("conf", "./conf/proxy.toml", "proxy's config file")
+var initConf = flag.Bool("init", false, "create config files if not exists")
 
 func main() {
 	flag.Usage = func() {
@@ -20,11 +19,11 @@ func main() {
 		flag.PrintDefaults()
 	}
 	flag.Parse()
-	if *initConf != "" {
-		internal.InitConf(*initConf)
+	if *initConf {
+		internal.InitConf(filepath.Dir(*configPath))
 		return
 	}
 	log.SetFlags(log.Lshortfile | log.LstdFlags | log.Ldate)
-	manager := internal.NewProyManager(*configPath)
+	manager := internal.NewProxyManager(*configPath)
 	manager.Start()
 }

@@ -28,3 +28,4 @@ conf/poo*
 conf/pool.conf
 conf/tmp
 *.log
+log/

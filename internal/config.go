@@ -3,105 +3,79 @@ package internal
 import (
 	"io/ioutil"
 	"log"
-	"net/url"
 	"os"
-	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
-	"github.com/Unknwon/goconfig"
+	"github.com/fsgo/fsconf"
 )
 
-type config struct {
-	title           string
-	notice          string
-	port            int
-	confDir         string
-	configFile      string
-	timeout         int
-	reTry           int
-	reTryMax        int
-	aliveCheckURL   string
-	checkInterval   int64
-	authType        int
-	wrongStatusCode map[int]int
+type Config struct {
+	Title  string
+	Notice string
+
+	Port     int //  必填，服务端口
+	Timeout  int // 可选，超时时间，单位秒,默认 30
+	ReTry    int // 可选，重试次数，默认 2
+	ReTryMax int // 可选，最大重试次数由客户端通过http header [X-Man-Retry]指定
+
+	AliveCheckURL   string // 必填，通过检测这个url来判断代理是否正常
+	CheckInterval   int    // 可选，检测代理有效的间隔时间,单位秒，默认 1800
+	AuthType        string // 可选，鉴权类型，可选值 no-不需要鉴权，basic、basic_any-任意帐号
+	WrongStatusCode []int
+}
+
+func (c *Config) IsWrongCode(code int) bool {
+	for i := 0; i < len(c.WrongStatusCode); i++ {
+		if c.WrongStatusCode[i] == code {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Config) getAliveCheckURL() string {
+	str := strconv.FormatInt(time.Now().UnixNano(), 10)
+	return strings.ReplaceAll(c.AliveCheckURL, "{%rand}", str)
+}
+
+func (c *Config) getCheckInterval() time.Duration {
+	if c.CheckInterval > 0 {
+		return time.Duration(c.CheckInterval) * time.Second
+	}
+	return 1800 * time.Second
+}
+
+func (c *Config) getTimeout() time.Duration {
+	if c.Timeout > 0 {
+		return time.Duration(c.Timeout) * time.Second
+	}
+	return 30 * time.Second
+}
+
+func (c *Config) getReTry() int {
+	if c.ReTry > 0 {
+		return c.ReTry
+	}
+	return 2
 }
 
 const (
 	// AuthTypeNO 不需要认证
-	AuthTypeNO = 0
+	AuthTypeNO = "no"
+
 	// AuthTypeBasic 使用basic
-	AuthTypeBasic = 1
+	AuthTypeBasic = "basic"
+
 	// AuthTypeBasicWithAny 使用basic，任意账号密码都可以
-	AuthTypeBasicWithAny = 2
+	AuthTypeBasicWithAny = "basic_any"
 )
 
-func loadConfig(configPath string) *config {
-	config := &config{}
-	absPath, err := filepath.Abs(configPath)
-
-	config.configFile = absPath
-	if err != nil {
-		log.Println("get config path failed", configPath)
-		return nil
-	}
-
-	config.confDir = filepath.Dir(absPath)
-
-	os.Chdir(config.confDir)
-
-	gconf, err := goconfig.LoadConfigFile(config.configFile)
-	if err != nil {
-		log.Println("load config failed:", err)
-		return nil
-	}
-	config.title = gconf.MustValue(goconfig.DEFAULT_SECTION, "title", "")
-
-	config.notice = gconf.MustValue(goconfig.DEFAULT_SECTION, "notice", "")
-
-	config.wrongStatusCode = make(map[int]int)
-
-	wrongStatusCodeSlice := strings.Split(gconf.MustValue(goconfig.DEFAULT_SECTION, "wrongStatusCode", ""), ",")
-
-	for _, v := range wrongStatusCodeSlice {
-		_code := int(getInt64(strings.TrimSpace(v)))
-		if _code > 0 {
-			config.wrongStatusCode[_code] = _code
-		}
-	}
-
-	config.port = gconf.MustInt(goconfig.DEFAULT_SECTION, "port", 8090)
-
-	config.timeout = gconf.MustInt(goconfig.DEFAULT_SECTION, "timeout", 30)
-	if config.timeout > 120 {
-		config.timeout = 120
-	}
-	config.checkInterval = gconf.MustInt64(goconfig.DEFAULT_SECTION, "checkInterval", 3600)
-	if config.checkInterval <= 60 {
-		config.checkInterval = 1800
-	}
-
-	_authType := strings.ToLower(gconf.MustValue(goconfig.DEFAULT_SECTION, "authType", "none"))
-	authTypes := map[string]int{"none": 0, "basic": 1, "basic_any": 2}
-
-	if authType, has := authTypes[_authType]; has {
-		config.authType = authType
-	} else {
-		log.Println("conf error,unknow value authType:", _authType)
-	}
-
-	config.reTry = gconf.MustInt(goconfig.DEFAULT_SECTION, "reTry", 0)
-
-	config.reTryMax = gconf.MustInt(goconfig.DEFAULT_SECTION, "reTryMax", 0)
-
-	aliveCheckURL := gconf.MustValue(goconfig.DEFAULT_SECTION, "aliveCheck", "")
-	_, err = url.Parse(aliveCheckURL)
-	if err != nil {
-		log.Println("alive check url wrong:", err)
-		return nil
-	}
-	config.aliveCheckURL = aliveCheckURL
-
-	return config
+func loadConfig(fp string) (*Config, error) {
+	var c *Config
+	err := fsconf.Parse(fp, &c)
+	return c, err
 }
 
 // InitConf 第一次运行 初始化配置文件目录
@@ -111,22 +85,21 @@ func InitConf(confDir string) {
 		err = os.Chdir(confDir)
 	}
 	if err != nil {
-		log.Println("err:", err)
-		os.Exit(1)
+		log.Fatalln("err:", err)
 	}
+
 	if !stat.IsDir() {
-		log.Println("not dir")
-		os.Exit(1)
+		log.Fatalln(confDir, "is not dir")
 	}
-	stat, err = os.Stat("proxy.conf")
+
+	stat, err = os.Stat("proxy.toml")
 
 	if os.IsExist(err) {
-		log.Println("proxy.conf exists!")
-		os.Exit(1)
+		log.Fatalln("proxy.toml exists!")
 	}
 
-	ioutil.WriteFile("proxy.conf", Asset.GetContent("/res/conf/proxy.conf"), 0644)
-	ioutil.WriteFile("pool.conf", Asset.GetContent("/res/conf/pool.conf"), 0644)
-	ioutil.WriteFile("users", Asset.GetContent("/res/conf/users"), 0644)
+	ioutil.WriteFile("proxy.toml", AssetGetContent("conf/proxy.toml"), 0644)
+	ioutil.WriteFile("pool.conf", AssetGetContent("conf/pool.conf"), 0644)
+	ioutil.WriteFile("users.toml", AssetGetContent("conf/users.toml"), 0644)
 	log.Println("init conf done")
 }

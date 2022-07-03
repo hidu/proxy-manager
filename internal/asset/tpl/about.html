@@ -1,0 +1,49 @@
+ <br/>
+<p class="h3">about</p>
+ <p>Proxy manager.</p>
+ <p>Support <font color=blue>http、https、socks4、socks4a、socks5、shadowsocks</font> proxy.</p>
+ <p>Project : <a href="https://github.com/hidu/proxy-manager" target="_blank">https://github.com/hidu/proxy-manager</a></p>
+ <p>Current Version: <font color=blue>{{.version}}</font></p> 
+ <!--
+ <p id="new_version_slot"></p>
+ -->
+ <br/>
+
+<br/>
+<br/>
+ <!--
+<script>
+setTimeout(function(){
+     script=document.createElement('script'); 
+     script.src="https://hidu.github.io/proxy_man/check.js"
+     script.type='text/javascript'; 
+     document.getElementsByTagName('head').item(0).appendChild(script)
+},1000);
+</script>
+  -->
+<p class="h4">Usage:</p>
+ 
+<p class="h5">1. As Proxy Server</p>
+not support https url.
+<pre>
+ch = curl_init(); 
+curl_setopt($ch, CURLOPT_URL, "https://hidu.github.io/hello.md"); 
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, <b>CURLOPT_PROXY</b>,"<font color=blue>{{.proxy_host}}:{{.proxy_port}}</font>");
+curl_setopt($ch, <b>CURLOPT_PROXYUSERPWD</b>,"<font color=blue>name:psw</font>");// if necessary
+$body=curl_exec($ch); 
+curl_close($ch);
+</pre>
+ 
+<pre>
+curl -x http://$name:$psw@{{.proxy_host}}:{{.proxy_port}} 'http://hidu.github.io/hello.md'
+</pre>
+ 
+<p class="h5">2. As Gateway Server</p>
+ support http、https url.
+ <pre>
+curl 'http://$name:$psw@{{.proxy_host}}:{{.proxy_port}}/query?url=https://hidu.github.io/hello.md
+  
+curl 'http://$name:$psw@{{.proxy_host}}:{{.proxy_port}}/query?method=POST&url=https://hidu.github.io/hello.md&headers={"a":["a"]}' \
+  -X POST --data "request body"
+</pre>

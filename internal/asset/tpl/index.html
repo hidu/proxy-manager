@@ -1,0 +1,91 @@
+<br/>
+<p>{{.notice}}</p>
+<table style="width:100%">
+<tr>
+<td width="360px" valign="top">
+<table style="width:100%" class="tb_1">
+<caption><a href="/status" target="_blank">status</a></caption>
+  <tr><th width="130px">Server Start</th> <td>{{.startTime}}</td></tr>
+  <tr><th>Proxy Total </th> <td>{{.proxy_count.Get "total"}}</td></tr>
+  <tr><th>Proxy Active </th> <td>{{.proxy_count.Get "active"}} </td></tr>
+  <tr><th>HTTP Active</th> <td>{{.proxy_count.Get "active_http"}}</td></tr>
+  <tr><th>HTTPS Active</th> <td>{{.proxy_count.Get "active_https"}}</td></tr>
+  <tr><th>Socks5 Active</th> <td>{{.proxy_count.Get "active_socks5"}}</td></tr>
+  <tr><th>Socks4 Active</th> <td>{{.proxy_count.Get "active_socks4"}}</td></tr>
+  <tr><th>Socks4a Active</th> <td>{{.proxy_count.Get "active_socks4a"}}</td></tr>
+  <tr><th>ss Active</th> <td>{{.proxy_count.Get "active_ss"}}</td></tr>
+  <tr><th>Request Total</th> <td>{{.proxyReqTotal}}</td></tr>
+  <tr><th>Request Success</th> <td>{{.proxy_count_suc}}</td></tr>
+  <tr><th>Request Failed</th> <td>{{.proxy_count_failed}}</td></tr>
+  
+</table>
+</td>
+<td width="20px"></td>
+<td valign="top">
+<div>
+
+<table  class="tb_1">
+    <caption> Architecture ( <a href="/about">usage</a> )</caption>
+    <tbody>
+        <tr>
+            <td rowspan="2"  class="t_c">Client</td>
+            <td  colspan="2" class="t_c b_y">Proxy Manager</td>
+            <td rowspan="2"  class="t_c">Target Server</td>
+        </tr>
+        <tr>
+            <td class="t_c">HTTP Proxy</td>
+            <td class="t_c"> Proxy Pool</td>
+        </tr>
+		<tr>
+			<td rowspan="3" class="t_c">Using Proxy</td>
+			<td rowspan="3" class="t_c">http://{{.proxy_host}}:{{.proxy_port}}</td>
+			<td nowrap="nowrap">http://xxx.xxx:3128</td>
+			<td rowspan="3" class="t_c">www.baidu.com</td>
+		</tr>
+		<tr>
+			<td nowrap="nowrap">socks5://xxx.xxx:1080</td>
+		</tr>
+		<tr>
+			<td nowrap="nowrap">socks4://xxx.xxx:4567</td>
+		</tr>
+	</tbody>
+</table>
+
+
+</div>
+</td>
+</tr>
+</table>
+
+<script>
+var x_man_no=1;
+</script>
+
+{{if .isAdmin}}
+<table class="tb_1">
+<thead>
+  <tr>
+      <th width="80px">No.</th>
+      <th>Proxy</th>
+      <th width="80px">Used</th>
+      <th width="300px" nowrap="nowrap">LastCheck</th>
+      <th width="100px" nowrap="nowrap" title="ms">CheckUsed</th>
+      <th width="100px">Success</th>
+      <th width="100px">Fail</th>
+  </tr>
+</thead>
+<tbody>
+	{{range $name,$proxy:=.proxies}}
+	 <tr>
+         <td class="t_c"><script>document.write(x_man_no++)</script></td>
+         <td>{{$name}}</td>
+         <td class="t_c">{{$proxy.Used}}</td>
+         <td class="t_c" nowrap="nowrap">{{$proxy.LastCheck}}</td>
+         <td class="t_c">{{$proxy.CheckUsed}}</td>
+         <td class="t_c">{{$proxy.Count.Success}}</td>
+         <td class="t_c">{{$proxy.Count.Failed}}</td>
+	 </tr>
+	{{end}}
+</tbody>
+</table>
+{{end}}
