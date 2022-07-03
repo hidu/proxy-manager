@@ -8,7 +8,7 @@ import (
 	"net/url"
 )
 
-var proxy = flag.String("proxy", "http://127.0.0.1:8090", "proxy info")
+var proxy = flag.String("proxy", "http://127.0.0.1:8128", "proxy info")
 var target = flag.String("url", "http://www.baidu.com", "url get")
 var dumpBody = flag.Bool("body", false, "dump the response body")
 var status_ok = flag.String("status_ok", "200,304", "x-man-status-ok")

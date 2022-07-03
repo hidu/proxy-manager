@@ -20,12 +20,10 @@ _cgo_export.*
 _testmain.go
 
 dest/
-
+conf/pool_bad.list
+conf/pool_checked.conf
 *.exe
 *.test
 test
-conf/poo*
-conf/pool.conf
-conf/tmp
 *.log
 log/

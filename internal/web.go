@@ -136,18 +136,20 @@ func (man *ProxyManager) handelAdd(w http.ResponseWriter, req *http.Request, ctx
 		}
 
 		txtFile := str_util.NewTxtFileFromString(proxysTxt)
-		proxys, _ := man.proxyPool.loadProxiesFromTxtFile(txtFile)
-		if len(proxys) == 0 {
+		proxies, _ := man.proxyPool.loadProxiesFromTxtFile(txtFile)
+		if proxies.Total() == 0 {
 			ctx.addLogMsg("no proxy, form input:[", proxysTxt, "]")
 			w.Write([]byte("<script>alert('no proxy');</script>"))
 			return
 		}
 		n := 0
-		for _, proxy := range proxys {
+		proxies.Range(func(proxyURL string, proxy *Proxy) bool {
 			if man.proxyPool.addProxy(proxy) {
 				n++
 			}
-		}
+			return true
+		})
+
 		if n > 0 {
 			go man.proxyPool.runTest()
 		}
@@ -332,7 +334,14 @@ func (man *ProxyManager) handelCheckLogin(req *http.Request, ctx *webRequestCtx)
 
 func renderHTML(fileName string, values map[string]interface{}, layout bool) string {
 	html := AssetGetContent("tpl/" + fileName)
-	myFn := template.FuncMap{}
+	myFn := template.FuncMap{
+		"myTime": func(t time.Time) string {
+			return t.Format("20060102 15:04:05")
+		},
+		"myDur": func(d time.Duration) string {
+			return fmt.Sprintf("%.03f s", d.Seconds())
+		},
+	}
 	tpl, _ := template.New("page").Funcs(myFn).Parse(string(html))
 
 	var bf []byte

@@ -76,7 +76,7 @@ func setEnv(cfp string) {
 // Start start server
 func (man *ProxyManager) Start() {
 	addr := fmt.Sprintf("%s:%d", "", man.config.Port)
-	log.Println("start proxy man at:", addr)
+	log.Println("start proxy manager at:", addr)
 	err := http.ListenAndServe(addr, man)
 	log.Println("proxy server exit:", err)
 }

@@ -80,8 +80,8 @@ var x_man_no=1;
          <td class="t_c"><script>document.write(x_man_no++)</script></td>
          <td>{{$name}}</td>
          <td class="t_c">{{$proxy.Used}}</td>
-         <td class="t_c" nowrap="nowrap">{{$proxy.LastCheck}}</td>
-         <td class="t_c">{{$proxy.CheckUsed}}</td>
+         <td class="t_c" nowrap="nowrap">{{$proxy.LastCheck|myTime}}</td>
+         <td class="t_c">{{$proxy.CheckUsed|myDur}}</td>
          <td class="t_c">{{$proxy.Count.Success}}</td>
          <td class="t_c">{{$proxy.Count.Failed}}</td>
 	 </tr>

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -18,11 +17,8 @@ import (
 
 // ProxyPool 代理池
 type ProxyPool struct {
-	proxyListActive map[string]*Proxy
-	proxyListAll    map[string]*Proxy
-	mu              sync.RWMutex
-
-	SessionProxys map[int64]map[string]*Proxy
+	activeList ProxyList // 活跃可用的
+	allList    ProxyList // 所有的
 
 	config *Config
 
@@ -31,26 +27,18 @@ type ProxyPool struct {
 	checkChan   chan string
 	testRunChan chan bool
 
-	proxyUsed map[string]map[string]int64
-
 	Count *proxyCount
 }
 
 // loadPool 从配置文件中加载代理池
 func loadPool(cfg *Config) *ProxyPool {
 	log.Println("loading proxy pool...")
-	pool := &ProxyPool{}
-	pool.config = cfg
-	pool.proxyListActive = make(map[string]*Proxy)
-	pool.proxyListAll = make(map[string]*Proxy)
-	pool.SessionProxys = make(map[int64]map[string]*Proxy)
-
-	pool.proxyUsed = make(map[string]map[string]int64)
-
-	pool.checkChan = make(chan string, 100)
-	pool.testRunChan = make(chan bool, 1)
-
-	pool.Count = newProxyCount()
+	pool := &ProxyPool{
+		config:      cfg,
+		checkChan:   make(chan string, 100),
+		testRunChan: make(chan bool, 1),
+		Count:       newProxyCount(),
+	}
 
 	checkURL := pool.config.getAliveCheckURL()
 
@@ -66,19 +54,19 @@ func loadPool(cfg *Config) *ProxyPool {
 
 	proxyAll, err := pool.loadConf("pool.conf")
 	if err != nil {
-		log.Println("pool.conf not exists")
+		log.Println("parser pool.conf failed:", err, ", ignored")
 	}
-	proxyAllChecked, err := pool.loadConf("pool_checked.conf")
+	log.Printf("%d proxies in pool.conf\n", proxyAll.Total())
+	pool.allList = proxyAll
+
+	proxyChecked, err := pool.loadConf("pool_checked.conf")
 	if err != nil {
-		log.Println("loadConf")
+		log.Println("parser pool_checked.conf failed:", err, ", ignored")
 	}
-	pool.proxyListAll = proxyAllChecked
-	for _url, proxy := range proxyAll {
-		if _, has := pool.proxyListAll[_url]; !has {
-			pool.proxyListAll[_url] = proxy
-		}
-	}
-	if len(pool.proxyListAll) == 0 {
+	log.Printf("%d proxies in pool_checked.conf\n", proxyChecked.Total())
+	proxyChecked.MergeTo(pool.allList)
+
+	if pool.allList.Total() == 0 {
 		log.Println("proxy pool list is empty")
 	}
 
@@ -88,34 +76,23 @@ func loadPool(cfg *Config) *ProxyPool {
 		pool.runTest()
 	}, pool.config.getCheckInterval())
 
-	SetInterval(func() {
-		pool.cleanProxyUsed()
-	}, 1200*time.Second)
-
 	return pool
 }
 
 func (p *ProxyPool) String() string {
-	var allProxy []string
-	for _, proxy := range p.proxyListAll {
-		allProxy = append(allProxy, proxy.String())
-	}
-	return strings.Join(allProxy, "\n")
+	return p.allList.String()
 }
 
-func (p *ProxyPool) loadConf(confName string) (map[string]*Proxy, error) {
-	proxies := make(map[string]*Proxy)
+func (p *ProxyPool) loadConf(confName string) (ProxyList, error) {
 	confPath := filepath.Join(fsenv.ConfRootDir(), confName)
 	txtFile, err := str_util.NewTxtFile(confPath)
 	if err != nil {
-		log.Println("load proxy p failed[", confName, "]")
-		return proxies, err
+		return ProxyList{}, err
 	}
 	return p.loadProxiesFromTxtFile(txtFile)
 }
 
-func (p *ProxyPool) loadProxiesFromTxtFile(txtFile *str_util.TxtFile) (map[string]*Proxy, error) {
-	proxies := make(map[string]*Proxy)
+func (p *ProxyPool) loadProxiesFromTxtFile(txtFile *str_util.TxtFile) (ProxyList, error) {
 	defaultValues := make(map[string]string)
 	defaultValues["proxy"] = "required"
 	defaultValues["weight"] = "1"
@@ -126,15 +103,16 @@ func (p *ProxyPool) loadProxiesFromTxtFile(txtFile *str_util.TxtFile) (map[strin
 
 	datas, err := txtFile.KvMapSlice("=", true, defaultValues)
 	if err != nil {
-		return proxies, err
+		return ProxyList{}, err
 	}
+	pl := ProxyList{}
 	for _, kv := range datas {
 		proxy := p.parseProxy(kv)
 		if proxy != nil {
-			proxies[proxy.proxy] = proxy
+			pl.Add(proxy)
 		}
 	}
-	return proxies, nil
+	return pl, nil
 }
 
 func (p *ProxyPool) parseProxy(info map[string]string) *Proxy {
@@ -163,85 +141,50 @@ func (p *ProxyPool) parseProxy(info map[string]string) *Proxy {
 	return proxy
 }
 
+func (p *ProxyPool) addProxy(proxy *Proxy) bool {
+	return p.allList.Add(proxy)
+}
+
 func (p *ProxyPool) getProxy(proxyURL string) *Proxy {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	if proxy, has := p.proxyListAll[proxyURL]; has {
-		return proxy
-	}
-	return nil
+	return p.allList.Get(proxyURL)
 }
 
 func (p *ProxyPool) addProxyActive(proxyURL string) bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if proxy, has := p.proxyListAll[proxyURL]; has {
-		if _, hasAct := p.proxyListActive[proxyURL]; !hasAct {
-			p.proxyListActive[proxyURL] = proxy
-			return true
-		}
+	proxy := p.allList.Get(proxyURL)
+	if proxy == nil {
+		return false
 	}
-	return false
-}
-
-func (p *ProxyPool) addProxy(proxy *Proxy) bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if _, has := p.proxyListAll[proxy.proxy]; !has {
-		p.proxyListAll[proxy.proxy] = proxy
-		return true
-	}
-	return false
+	return p.activeList.Add(proxy)
 }
 
 func (p *ProxyPool) removeProxyActive(proxyURL string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if _, has := p.proxyListActive[proxyURL]; has {
-		delete(p.proxyListActive, proxyURL)
-	}
+	p.activeList.Remove(proxyURL)
 }
 
 func (p *ProxyPool) removeProxy(proxyURL string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if _, has := p.proxyListAll[proxyURL]; has {
-		delete(p.proxyListAll, proxyURL)
-	}
-	if _, has := p.proxyListActive[proxyURL]; has {
-		delete(p.proxyListActive, proxyURL)
-	}
+	p.allList.Remove(proxyURL)
+	p.activeList.Remove(proxyURL)
 }
 
 var errorNoProxy = fmt.Errorf("no active proxy")
 
 //
 func (p *ProxyPool) getOneProxy(uname string) (*Proxy, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	l := len(p.proxyListActive)
-	if l == 0 {
+	if p.activeList.Total() == 0 {
 		return nil, errorNoProxy
 	}
 
-	userUsed, has := p.proxyUsed[uname]
-	if !has || len(userUsed) >= len(p.proxyListActive) {
-		userUsed = make(map[string]int64)
-	}
-	p.proxyUsed[uname] = userUsed
+	var proxy *Proxy
+	p.activeList.Range(func(proxyURL string, p *Proxy) bool {
+		proxy = p
+		return false
+	})
 
-	for _, proxy := range p.proxyListActive {
-		if _, has := userUsed[proxy.proxy]; has {
-			continue
-		}
-		proxy.Used++
-		userUsed[proxy.proxy] = time.Now().Unix()
-		return proxy, nil
+	if proxy == nil {
+		return nil, errorNoProxy
 	}
-	return nil, errorNoProxy
+	proxy.IncrUsed()
+	return proxy, nil
 }
 
 func (p *ProxyPool) runTest() {
@@ -249,22 +192,27 @@ func (p *ProxyPool) runTest() {
 	defer (func() {
 		<-p.testRunChan
 	})()
-	start := time.Now()
-	proxyTotal := len(p.proxyListAll)
+
+	proxyTotal := p.allList.Total()
 	log.Println("start test all proxy, total=", proxyTotal)
+	if proxyTotal == 0 {
+		return
+	}
+	start := time.Now()
 
 	var wg sync.WaitGroup
-	for name := range p.proxyListAll {
+	p.allList.Range(func(proxyURL string, proxy *Proxy) bool {
 		wg.Add(1)
-		go (func(proxyUrl string) {
-			p.testProxyAddActive(proxyUrl)
-			wg.Done()
-		})(name)
-	}
+		go func() {
+			defer wg.Done()
+			p.testProxyAddActive(proxyURL)
+		}()
+		return true
+	})
 	wg.Wait()
 
 	used := time.Now().Sub(start)
-	log.Println("test all proxy finish, total:", proxyTotal, "used:", used, "activeTotal:", len(p.proxyListActive))
+	log.Println("test all proxy finish, total:", proxyTotal, "used:", used, "activeTotal:", len(p.ActiveList()))
 
 	p.cleanBadProxy(24 * time.Hour)
 
@@ -348,16 +296,17 @@ func (p *ProxyPool) markProxyStatus(proxy *Proxy, status proxyUsedStatus) {
 // GetProxyNumbers 返回各种代理的数量 web页面会使用
 func (p *ProxyPool) GetProxyNumbers() GroupNumbers {
 	data := newGroupNumbers()
-	data.Add("total", len(p.proxyListAll))
-	data.Add("active", len(p.proxyListActive))
+	data.Add("total", p.allList.Total())
+	data.Add("active", p.activeList.Total())
 	for _type := range proxyTransports {
 		name := fmt.Sprintf("active_%s", _type)
 		data.Add(name, 0)
 	}
-	for _, proxy := range p.proxyListActive {
+	p.activeList.Range(func(proxyURL string, proxy *Proxy) bool {
 		name := fmt.Sprintf("active_%s", proxy.URL.Scheme)
 		data.Add(name, 1)
-	}
+		return true
+	})
 	return data
 }
 
@@ -381,11 +330,13 @@ func doRequestGet(urlStr string, proxy *Proxy, timeout time.Duration) (resp *htt
 func (p *ProxyPool) cleanBadProxy(dur time.Duration) {
 	last := time.Now().Add(-1 * dur)
 	var proxyBad []*Proxy
-	for _, proxy := range p.proxyListAll {
+
+	p.allList.Range(func(proxyURL string, proxy *Proxy) bool {
 		if proxy.LastCheckOk.Before(last) {
 			proxyBad = append(proxyBad, proxy)
 		}
-	}
+		return true
+	})
 
 	for _, proxy := range proxyBad {
 		p.removeProxy(proxy.proxy)
@@ -394,34 +345,11 @@ func (p *ProxyPool) cleanBadProxy(dur time.Duration) {
 	}
 }
 
-func (p *ProxyPool) cleanProxyUsed() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	now := time.Now().Unix()
-	var delNames []string
-	for name, infos := range p.proxyUsed {
-		var delKeys []string
-		for k, v := range infos {
-			if now-v > 1200 {
-				delKeys = append(delKeys, k)
-			}
-		}
-		for _, k := range delKeys {
-			delete(infos, k)
-		}
-		if len(infos) == 0 {
-			delNames = append(delNames, name)
-		}
-	}
-
-	for _, name := range delNames {
-		delete(p.proxyUsed, name)
-		log.Println("cleanProxyUsed name=", name)
-	}
-}
-
 func (p *ProxyPool) ActiveList() map[string]*Proxy {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.proxyListActive
+	proxies := make(map[string]*Proxy)
+	p.activeList.Range(func(proxyURL string, proxy *Proxy) bool {
+		proxies[proxyURL] = proxy
+		return true
+	})
+	return proxies
 }
