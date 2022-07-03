@@ -19,7 +19,7 @@ go install github.com/hidu/proxy-manager@master
 ## 配置
 ### 初始化配置
 ```
-proxy-manager -init_conf
+proxy-manager -init
 ```
 ### 配置文件
 <table>
