@@ -52,19 +52,8 @@ func loadPool(cfg *Config) *ProxyPool {
 		log.Println("get alive info success! url:", checkURL, "resp_header:", pool.aliveCheckResponse.Header)
 	}
 
-	proxyAll, err := pool.loadConf("pool.conf")
-	if err != nil {
-		log.Println("parser pool.conf failed:", err, ", ignored")
-	}
-	log.Printf("%d proxies in pool.conf\n", proxyAll.Total())
-	pool.allList = proxyAll
-
-	proxyChecked, err := pool.loadConf("pool_checked.conf")
-	if err != nil {
-		log.Println("parser pool_checked.conf failed:", err, ", ignored")
-	}
-	log.Printf("%d proxies in pool_checked.conf\n", proxyChecked.Total())
-	proxyChecked.MergeTo(pool.allList)
+	pool.loadPoolConfToAll(confPool)
+	pool.loadPoolConfToAll(confPoolChecked)
 
 	if pool.allList.Total() == 0 {
 		log.Println("proxy pool list is empty")
@@ -79,11 +68,20 @@ func loadPool(cfg *Config) *ProxyPool {
 	return pool
 }
 
+func (p *ProxyPool) loadPoolConfToAll(name string) {
+	pl, err := p.parserConf(name)
+	if err != nil {
+		log.Printf("parser %s failed: %v, ignored\n", name, err)
+	}
+	log.Printf("found %d proxies in %s\n", pl.Total(), name)
+	pl.MergeTo(&p.allList)
+}
+
 func (p *ProxyPool) String() string {
 	return p.allList.String()
 }
 
-func (p *ProxyPool) loadConf(confName string) (ProxyList, error) {
+func (p *ProxyPool) parserConf(confName string) (ProxyList, error) {
 	confPath := filepath.Join(fsenv.ConfRootDir(), confName)
 	txtFile, err := str_util.NewTxtFile(confPath)
 	if err != nil {
@@ -129,7 +127,7 @@ func (p *ProxyPool) parseProxy(info map[string]string) *Proxy {
 	for _, fieldName := range intFields {
 		intValues[fieldName], err = strconv.Atoi(info[fieldName])
 		if err != nil {
-			log.Println("parse [", fieldName, "]failed,not int.err:", err)
+			log.Println("parse [", fieldName, "] failed, not int. err:", err)
 			intValues[fieldName] = 0
 		}
 	}
@@ -174,11 +172,7 @@ func (p *ProxyPool) getOneProxy(uname string) (*Proxy, error) {
 		return nil, errorNoProxy
 	}
 
-	var proxy *Proxy
-	p.activeList.Range(func(proxyURL string, p *Proxy) bool {
-		proxy = p
-		return false
-	})
+	proxy := p.activeList.Next()
 
 	if proxy == nil {
 		return nil, errorNoProxy
@@ -217,7 +211,9 @@ func (p *ProxyPool) runTest() {
 	p.cleanBadProxy(24 * time.Hour)
 
 	testResultFile := filepath.Join(fsenv.ConfRootDir(), "pool_checked.conf")
-	fs.FilePutContents(testResultFile, []byte(p.String()))
+
+	all := p.allList.String()
+	fs.FilePutContents(testResultFile, []byte(all))
 }
 
 // testProxyAddActive 测试一个代理是否可用 若可用则加入代理池否则删除

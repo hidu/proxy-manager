@@ -187,7 +187,7 @@ func (hc *httpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		w.Write([]byte("all failed," + fmt.Sprintf("try:%d", no)))
 		return
 	}
-	log.Println("resp.Header:", resp.Header)
+	// log.Println("resp.Header:", resp.Header)
 
 	resp.Header.Del("Content-Length")
 	resp.Header.Del("Connection")

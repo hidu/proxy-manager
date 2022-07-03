@@ -74,7 +74,7 @@ func newProxy(proxyURL string) *Proxy {
 }
 
 func (p *Proxy) String() string {
-	return fmt.Sprintf("proxy=%-40s\tweight=%d\tlast_check=%d\tcheck_used=%s\tstatus=%d\tlast_check_ok=%d",
+	return fmt.Sprintf("proxy=%s\tweight=%d\tlast_check=%d\tcheck_used=%s\tstatus=%d\tlast_check_ok=%d",
 		p.proxy,
 		p.Weight,
 		p.LastCheck.Unix(),
@@ -92,9 +92,14 @@ func (p *Proxy) IsOk() bool {
 func (p *Proxy) IncrUsed() {
 	atomic.AddInt64(&p.Used, 1)
 }
+func (p *Proxy) GetUsed() int64 {
+	return atomic.LoadInt64(&p.Used)
+}
 
 type ProxyList struct {
-	list sync.Map
+	list   sync.Map
+	all    atomic.Value
+	nextID int64
 }
 
 func (pl *ProxyList) Range(fn func(proxyURL string, proxy *Proxy) bool) {
@@ -105,11 +110,26 @@ func (pl *ProxyList) Range(fn func(proxyURL string, proxy *Proxy) bool) {
 
 func (pl *ProxyList) Add(p *Proxy) bool {
 	_, loaded := pl.list.LoadOrStore(p.proxy, p)
+	if !loaded {
+		pl.updateAll()
+	}
 	return !loaded
+}
+
+func (pl *ProxyList) updateAll() {
+	var all []*Proxy
+	pl.Range(func(proxyURL string, proxy *Proxy) bool {
+		all = append(all, proxy)
+		return true
+	})
+	pl.all.Store(all)
 }
 
 func (pl *ProxyList) Remove(key string) bool {
 	_, loaded := pl.list.LoadAndDelete(key)
+	if loaded {
+		pl.updateAll()
+	}
 	return loaded
 }
 
@@ -130,19 +150,29 @@ func (pl *ProxyList) Total() int {
 	return total
 }
 
-func (pl *ProxyList) MergeTo(to ProxyList) {
+func (pl *ProxyList) MergeTo(to *ProxyList) {
 	pl.list.Range(func(_, value any) bool {
 		to.Add(value.(*Proxy))
 		return true
 	})
 }
 
+func (pl *ProxyList) Next() *Proxy {
+	all := pl.all.Load()
+	if all == nil {
+		return nil
+	}
+	nextID := atomic.AddInt64(&pl.nextID, 1)
+	allProxy := all.([]*Proxy)
+	index := int(nextID) % len(allProxy)
+	return allProxy[index]
+}
+
 func (pl *ProxyList) String() string {
 	var all []string
-	pl.list.Range(func(_, value any) bool {
-		p := value.(*Proxy)
-		all = append(all, p.String())
+	pl.Range(func(proxyURL string, proxy *Proxy) bool {
+		all = append(all, proxy.String())
 		return true
 	})
-	return strings.Join(all, "\n")
+	return strings.Join(all, "\n") + "\n"
 }

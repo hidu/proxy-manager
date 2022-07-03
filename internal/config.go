@@ -78,6 +78,12 @@ func loadConfig(fp string) (*Config, error) {
 	return c, err
 }
 
+const (
+	confPool        = "pool.conf"
+	confPoolChecked = "pool_checked.conf"
+	confPoolBad     = "pool_bad.conf"
+)
+
 // InitConf 第一次运行 初始化配置文件目录
 func InitConf(confDir string) {
 	stat, err := os.Stat(confDir)
@@ -99,7 +105,7 @@ func InitConf(confDir string) {
 	}
 
 	ioutil.WriteFile("proxy.toml", AssetGetContent("conf/proxy.toml"), 0644)
-	ioutil.WriteFile("pool.conf", AssetGetContent("conf/pool.conf"), 0644)
+	ioutil.WriteFile(confPool, AssetGetContent("conf/pool.conf"), 0644)
 	ioutil.WriteFile("users.toml", AssetGetContent("conf/users.toml"), 0644)
 	log.Println("init conf done")
 }
