@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"strconv"
@@ -130,6 +131,12 @@ func (hc *httpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if _clientReTry >= 0 && _clientReTry <= hc.ProxyManager.config.ReTryMax {
 		maxReTry = _clientReTry + 1
 	}
+
+	if req.Method == http.MethodConnect {
+		hc.handlerHTTPS(w, req, user)
+		return
+	}
+
 	no := 1
 	for ; no <= maxReTry; no++ {
 		rlog.addLog("try", fmt.Sprintf("%d/%d", no, maxReTry))
@@ -207,6 +214,50 @@ func (hc *httpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		rlog.addLog("close response body err:", err)
 	}
 	rlog.addLog("OK")
+}
+
+func (hc *httpClient) handlerHTTPS(w http.ResponseWriter, req *http.Request, user *User) {
+	proxy, err := hc.ProxyManager.proxyPool.getOneProxy(user.Name)
+	if err != nil {
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write([]byte("not proxy"))
+		return
+	}
+	host := proxy.URL.Host
+	if !strings.Contains(host, ":") {
+		host += ":443"
+	}
+	h, p, err := net.SplitHostPort(host)
+	if err != nil {
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write([]byte("parser proxy host failed, host=" + proxy.URL.Host))
+		return
+	}
+	address := net.JoinHostPort(h, p)
+	sConn, err := net.DialTimeout("tcp", address, hc.ProxyManager.config.getTimeout())
+	if err != nil {
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write([]byte("connect to proxy failed:" + err.Error()))
+		return
+	}
+
+	hj, ok := w.(http.Hijacker)
+	if !ok {
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write([]byte("can not hijack"))
+		return
+	}
+	conn, _, err := hj.Hijack()
+	if err != nil {
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write([]byte("can not hijack"))
+		return
+	}
+	// conn.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
+	sConn.Write([]byte("CONNECT " + req.URL.Host + " HTTP/1.1\r\n"))
+	sConn.Write([]byte("Host: " + req.URL.Host + "\r\n\r\n"))
+	go io.Copy(sConn, conn)
+	go io.Copy(conn, sConn)
 }
 
 func copyHeaders(dst, src http.Header) {

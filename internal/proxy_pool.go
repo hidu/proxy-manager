@@ -46,7 +46,8 @@ func loadPool(cfg *Config) *ProxyPool {
 		var err error
 		pool.aliveCheckResponse, err = doRequestGet(checkURL, nil, pool.config.getTimeout())
 		if err != nil {
-			log.Println("get alive response failed, url:", checkURL, "err:", err)
+			// todo allow fail
+			log.Fatalln("get alive response failed, url:", checkURL, "err:", err)
 			return nil
 		}
 		log.Println("get alive info success! url:", checkURL, "resp_header:", pool.aliveCheckResponse.Header)

@@ -49,9 +49,6 @@ func NewProxyManager(configPath string) *ProxyManager {
 		config:    cfg,
 	}
 	manager.proxyPool = loadPool(cfg)
-	if manager.proxyPool == nil {
-		log.Fatalln("parse proxyPool failed")
-	}
 
 	manager.loadUsers()
 	SetInterval(func() {
