@@ -9,6 +9,7 @@ import (
 	"net/http/httputil"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -18,6 +19,7 @@ type requestLog struct {
 	startTime time.Time
 	req       *http.Request
 	logID     int64
+	mux       sync.Mutex
 }
 
 func newRequestLog(req *http.Request) *requestLog {
@@ -27,6 +29,9 @@ func newRequestLog(req *http.Request) *requestLog {
 }
 
 func (rlog *requestLog) print() {
+	rlog.mux.Lock()
+	defer rlog.mux.Unlock()
+
 	if len(rlog.logData) == 0 {
 		return
 	}
@@ -40,11 +45,18 @@ func (rlog *requestLog) print() {
 }
 
 func (rlog *requestLog) setLog(arg ...interface{}) {
+	rlog.mux.Lock()
+	defer rlog.mux.Unlock()
+
 	rlog.data = append(rlog.logData, fmt.Sprint(arg))
 }
 func (rlog *requestLog) addLog(arg ...interface{}) {
+	rlog.mux.Lock()
+	defer rlog.mux.Unlock()
+
 	rlog.logData = append(rlog.logData, fmt.Sprint(arg))
 }
+
 func (rlog *requestLog) reset() {
 	rlog.startTime = time.Now()
 	rlog.logData = []string{}
@@ -133,7 +145,7 @@ func (hc *httpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	if req.Method == http.MethodConnect {
-		hc.handlerHTTPS(w, req, user)
+		hc.handlerHTTPS(w, req, user, rlog)
 		return
 	}
 
@@ -216,11 +228,12 @@ func (hc *httpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	rlog.addLog("OK")
 }
 
-func (hc *httpClient) handlerHTTPS(w http.ResponseWriter, req *http.Request, user *User) {
+func (hc *httpClient) handlerHTTPS(w http.ResponseWriter, req *http.Request, user *User, rlog *requestLog) {
 	proxy, err := hc.ProxyManager.proxyPool.getOneProxy(user.Name)
 	if err != nil {
 		w.WriteHeader(http.StatusBadGateway)
-		w.Write([]byte("not proxy"))
+		w.Write([]byte("no proxy"))
+		rlog.addLog("no proxy")
 		return
 	}
 	host := proxy.URL.Host
@@ -229,6 +242,7 @@ func (hc *httpClient) handlerHTTPS(w http.ResponseWriter, req *http.Request, use
 	}
 	h, p, err := net.SplitHostPort(host)
 	if err != nil {
+		rlog.addLog("invalid host:", host)
 		w.WriteHeader(http.StatusBadGateway)
 		w.Write([]byte("parser proxy host failed, host=" + proxy.URL.Host))
 		return
@@ -238,26 +252,66 @@ func (hc *httpClient) handlerHTTPS(w http.ResponseWriter, req *http.Request, use
 	if err != nil {
 		w.WriteHeader(http.StatusBadGateway)
 		w.Write([]byte("connect to proxy failed:" + err.Error()))
+		rlog.addLog("connect to proxy failed:", err)
 		return
 	}
+	defer sConn.Close()
+
+	deadLine := time.Now().Add(hc.ProxyManager.config.getTimeout())
+	sConn.SetDeadline(deadLine)
 
 	hj, ok := w.(http.Hijacker)
 	if !ok {
+		rlog.addLog("can not hijack")
 		w.WriteHeader(http.StatusBadGateway)
 		w.Write([]byte("can not hijack"))
 		return
 	}
 	conn, _, err := hj.Hijack()
 	if err != nil {
+		rlog.addLog("hijack failed")
 		w.WriteHeader(http.StatusBadGateway)
 		w.Write([]byte("can not hijack"))
 		return
 	}
-	// conn.Write([]byte("HTTP/1.0 200 Connection established\r\n\r\n"))
+	defer conn.Close()
+	conn.SetDeadline(deadLine)
+
 	sConn.Write([]byte("CONNECT " + req.URL.Host + " HTTP/1.1\r\n"))
+	sConn.Write([]byte("Connetion: close\r\n"))
 	sConn.Write([]byte("Host: " + req.URL.Host + "\r\n\r\n"))
-	go io.Copy(sConn, conn)
-	go io.Copy(conn, sConn)
+
+	if err = connCopyLimit(conn, sConn); err != nil {
+		rlog.addLog("copy CONNECT message header failed:", err)
+		return
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		n, e := io.Copy(conn, sConn)
+		rlog.addLog("copy.toClient", n, e)
+		sConn.Close()
+		conn.Close()
+	}()
+	go func() {
+		defer wg.Done()
+		n, e := io.Copy(sConn, conn)
+		rlog.addLog("copy.toServer", n, e)
+	}()
+	wg.Wait()
+	rlog.addLog("https handler finished")
+}
+
+func connCopyLimit(dst net.Conn, src net.Conn) error {
+	bf := make([]byte, 12)
+	n, err := io.ReadFull(src, bf)
+	if err != nil {
+		return err
+	}
+	_, err = dst.Write(bf[:n])
+	return err
 }
 
 func copyHeaders(dst, src http.Header) {
