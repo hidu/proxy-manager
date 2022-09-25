@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"io/ioutil"
 	"log"
 	"os"
 	"strconv"
@@ -15,15 +14,16 @@ type Config struct {
 	Title  string
 	Notice string
 
+	AliveCheckURL   string // 必填，通过检测这个url来判断代理是否正常
+	AuthType        string // 可选，鉴权类型，可选值 no-不需要鉴权，basic、basic_any-任意帐号
+	WrongStatusCode []int
+
 	Port     int //  必填，服务端口
 	Timeout  int // 可选，超时时间，单位秒,默认 30
 	ReTry    int // 可选，重试次数，默认 2
 	ReTryMax int // 可选，最大重试次数由客户端通过http header [X-Man-Retry]指定
 
-	AliveCheckURL   string // 必填，通过检测这个url来判断代理是否正常
-	CheckInterval   int    // 可选，检测代理有效的间隔时间,单位秒，默认 1800
-	AuthType        string // 可选，鉴权类型，可选值 no-不需要鉴权，basic、basic_any-任意帐号
-	WrongStatusCode []int
+	CheckInterval int // 可选，检测代理有效的间隔时间,单位秒，默认 1800
 }
 
 func (c *Config) IsWrongCode(code int) bool {
@@ -88,14 +88,15 @@ const (
 func InitConf(confDir string) {
 	stat, err := os.Stat(confDir)
 	if err == nil {
-		err = os.Chdir(confDir)
+		if !stat.IsDir() {
+			log.Fatalln(confDir, "is not dir")
+		}
+	} else {
+		_ = os.MkdirAll(confDir, 0755)
 	}
+	err = os.Chdir(confDir)
 	if err != nil {
 		log.Fatalln("err:", err)
-	}
-
-	if !stat.IsDir() {
-		log.Fatalln(confDir, "is not dir")
 	}
 
 	stat, err = os.Stat("proxy.toml")
@@ -104,8 +105,8 @@ func InitConf(confDir string) {
 		log.Fatalln("proxy.toml exists!")
 	}
 
-	ioutil.WriteFile("proxy.toml", AssetGetContent("conf/proxy.toml"), 0644)
-	ioutil.WriteFile(confPool, AssetGetContent("conf/pool.conf"), 0644)
-	ioutil.WriteFile("users.toml", AssetGetContent("conf/users.toml"), 0644)
+	os.WriteFile("proxy.toml", AssetGetContent("conf/proxy.toml"), 0644)
+	os.WriteFile(confPool, AssetGetContent("conf/pool.conf"), 0644)
+	os.WriteFile("users.toml", AssetGetContent("conf/users.toml"), 0644)
 	log.Println("init conf done")
 }
