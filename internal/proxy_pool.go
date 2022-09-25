@@ -17,9 +17,6 @@ import (
 
 // ProxyPool 代理池
 type ProxyPool struct {
-	activeList ProxyList // 活跃可用的
-	allList    ProxyList // 所有的
-
 	config *Config
 
 	aliveCheckResponse *http.Response
@@ -27,7 +24,10 @@ type ProxyPool struct {
 	checkChan   chan string
 	testRunChan chan bool
 
-	Count *proxyCount
+	Count      *proxyCount
+	activeList ProxyList // 活跃可用的
+	allList    ProxyList // 所有的
+
 }
 
 // loadPool 从配置文件中加载代理池
@@ -167,7 +167,6 @@ func (p *ProxyPool) removeProxy(proxyURL string) {
 
 var errorNoProxy = fmt.Errorf("no active proxy")
 
-//
 func (p *ProxyPool) getOneProxy(uname string) (*Proxy, error) {
 	if p.activeList.Total() == 0 {
 		return nil, errorNoProxy

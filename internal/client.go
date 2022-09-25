@@ -14,10 +14,10 @@ import (
 )
 
 type requestLog struct {
-	data      []string
-	logData   []string
 	startTime time.Time
 	req       *http.Request
+	data      []string
+	logData   []string
 	logID     int64
 	mux       sync.Mutex
 }

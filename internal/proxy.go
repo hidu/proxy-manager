@@ -49,15 +49,15 @@ func (status proxyUsedStatus) String() string {
 
 // Proxy 一个代理
 type Proxy struct {
-	proxy       string
+	LastCheck   time.Time
+	LastCheckOk time.Time
 	URL         *url.URL
+	Count       *proxyCount
+	proxy       string
 	Weight      int
 	StatusCode  proxyStatus
 	CheckUsed   time.Duration //
-	LastCheck   time.Time
-	LastCheckOk time.Time
 	Used        int64
-	Count       *proxyCount
 }
 
 func newProxy(proxyURL string) *Proxy {
@@ -97,8 +97,8 @@ func (p *Proxy) GetUsed() int64 {
 }
 
 type ProxyList struct {
-	list   sync.Map
 	all    atomic.Value
+	list   sync.Map
 	nextID int64
 }
 

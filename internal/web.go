@@ -19,12 +19,12 @@ import (
 const cookieName = "x-man-proxy"
 
 type webRequestCtx struct {
+	start   time.Time
 	values  map[string]interface{}
 	user    *User
-	isLogin bool
 	req     *http.Request
-	start   time.Time
 	logMsg  string
+	isLogin bool
 }
 
 func (ctx *webRequestCtx) isAdmin() bool {

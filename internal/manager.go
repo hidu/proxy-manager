@@ -20,12 +20,12 @@ var ProxyDebug = os.Getenv("ProxyManagerDebug") == "true"
 
 // ProxyManager manager server
 type ProxyManager struct {
+	startTime  time.Time
 	httpClient *httpClient
 	config     *Config
 	proxyPool  *ProxyPool
-	reqNum     int64
-	startTime  time.Time
 	users      map[string]*User
+	reqNum     int64
 	mux        sync.RWMutex
 }
 
