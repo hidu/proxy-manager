@@ -35,7 +35,7 @@ func (rlog *requestLog) print() {
 	if len(rlog.logData) == 0 {
 		return
 	}
-	used := time.Now().Sub(rlog.startTime)
+	used := time.Since(rlog.startTime)
 	log.Println("logID:", rlog.logID,
 		rlog.req.Method, rlog.req.URL.String(),
 		strings.Join(rlog.data, " "),
@@ -44,13 +44,14 @@ func (rlog *requestLog) print() {
 	rlog.reset()
 }
 
-func (rlog *requestLog) setLog(arg ...interface{}) {
+func (rlog *requestLog) setLog(arg ...any) {
 	rlog.mux.Lock()
 	defer rlog.mux.Unlock()
 
 	rlog.data = append(rlog.logData, fmt.Sprint(arg))
 }
-func (rlog *requestLog) addLog(arg ...interface{}) {
+
+func (rlog *requestLog) addLog(arg ...any) {
 	rlog.mux.Lock()
 	defer rlog.mux.Unlock()
 

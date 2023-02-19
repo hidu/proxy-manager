@@ -20,7 +20,7 @@ const cookieName = "x-man-proxy"
 
 type webRequestCtx struct {
 	start   time.Time
-	values  map[string]interface{}
+	values  map[string]any
 	user    *User
 	req     *http.Request
 	logMsg  string
@@ -33,10 +33,10 @@ func (ctx *webRequestCtx) isAdmin() bool {
 
 func (ctx *webRequestCtx) finalLog() {
 	req := ctx.req
-	log.Println(req.RemoteAddr, req.Method, req.RequestURI, "used:", time.Now().Sub(ctx.start), "refer:", req.Referer(), "ua:", req.UserAgent(), "logMsg:", ctx.logMsg)
+	log.Println(req.RemoteAddr, req.Method, req.RequestURI, "used:", time.Since(ctx.start), "refer:", req.Referer(), "ua:", req.UserAgent(), "logMsg:", ctx.logMsg)
 }
 
-func (ctx *webRequestCtx) addLogMsg(msg ...interface{}) {
+func (ctx *webRequestCtx) addLogMsg(msg ...any) {
 	if ctx.logMsg != "" {
 		ctx.logMsg += ","
 	}
@@ -57,7 +57,7 @@ func (man *ProxyManager) serveLocalRequest(w http.ResponseWriter, req *http.Requ
 
 	user, isLogin := man.handelCheckLogin(req, ctx)
 
-	values := make(map[string]interface{})
+	values := make(map[string]any)
 	values["title"] = man.config.Title
 	values["subTitle"] = ""
 	values["isLogin"] = isLogin
@@ -103,7 +103,6 @@ func (man *ProxyManager) serveLocalRequest(w http.ResponseWriter, req *http.Requ
 	} else {
 		http.NotFound(w, req)
 	}
-
 }
 
 func (man *ProxyManager) handelIndex(w http.ResponseWriter, _ *http.Request, ctx *webRequestCtx) {
@@ -153,7 +152,7 @@ func (man *ProxyManager) handelAdd(w http.ResponseWriter, req *http.Request, ctx
 		if n > 0 {
 			go man.proxyPool.runTest()
 		}
-		_, _ = w.Write([]byte(fmt.Sprintf("<script>alert('add %d new proxy');</script>", n)))
+		_, _ = fmt.Fprintf(w, "<script>alert('add %d new proxy');</script>", n)
 		ctx.addLogMsg("add new proxy total:", n)
 	}
 
@@ -187,7 +186,7 @@ func (man *ProxyManager) handelLogout(w http.ResponseWriter, req *http.Request, 
 }
 
 func (man *ProxyManager) handelStatus(w http.ResponseWriter, _ *http.Request, _ *webRequestCtx) {
-	values := make(map[string]interface{})
+	values := make(map[string]any)
 	values["StartTime"] = man.startTime.Format(timeFormatStd)
 	values["Version"] = version
 	values["Request"] = man.proxyPool.Count
@@ -213,7 +212,7 @@ func (man *ProxyManager) handelTest(w http.ResponseWriter, req *http.Request, ct
 		obj, err := url.Parse(urlStr)
 		if err != nil || !strings.HasPrefix(obj.Scheme, "http") {
 			ctx.addLogMsg("test with invalid url:", urlStr)
-			_, _ = w.Write([]byte(fmt.Sprintf("invalid url [%s], err:%v", urlStr, err)))
+			_, _ = fmt.Fprintf(w, "invalid url [%s], err:%v", urlStr, err)
 			return
 		}
 		proxyStr := strings.TrimSpace(req.PostFormValue("proxy"))
@@ -223,14 +222,14 @@ func (man *ProxyManager) handelTest(w http.ResponseWriter, req *http.Request, ct
 			_, err := url.Parse(proxyStr)
 			if err != nil {
 				ctx.addLogMsg("proxy info err:", err)
-				_, _ = w.Write([]byte(fmt.Sprintf("wrong proxy info [%s],err:%v", proxyStr, err)))
+				_, _ = fmt.Fprintf(w, "wrong proxy info [%s],err:%v", proxyStr, err)
 				return
 			}
 			proxy := newProxy(proxyStr)
 			resp, err := doRequestGet(urlStr, proxy, man.config.getTimeout())
 			if err != nil {
 				w.WriteHeader(502)
-				_, _ = w.Write([]byte(fmt.Sprintf("can not get [%s] via [%s]\nerr:%s", urlStr, proxyStr, err)))
+				_, _ = fmt.Fprintf(w, "can not get [%s] via [%s]\nerr:%s", urlStr, proxyStr, err)
 				ctx.addLogMsg("failed, url=", urlStr, ",err=", err)
 				return
 			}
@@ -238,7 +237,6 @@ func (man *ProxyManager) handelTest(w http.ResponseWriter, req *http.Request, ct
 			w.WriteHeader(resp.StatusCode)
 			_, _ = io.Copy(w, resp.Body)
 			_ = resp.Body.Close()
-
 		} else {
 			reqTest, _ := http.NewRequest("GET", urlStr, nil)
 			reqTest.SetBasicAuth(defaultTestUser.Name, defaultTestUser.Password)
@@ -247,7 +245,6 @@ func (man *ProxyManager) handelTest(w http.ResponseWriter, req *http.Request, ct
 
 			man.httpClient.ServeHTTP(w, reqTest)
 		}
-
 	}
 
 	switch req.Method {
@@ -263,7 +260,6 @@ func (man *ProxyManager) handelTest(w http.ResponseWriter, req *http.Request, ct
 	case "POST":
 		doPost()
 		return
-
 	}
 	http.NotFound(w, req)
 }
@@ -331,7 +327,7 @@ func (man *ProxyManager) handelCheckLogin(req *http.Request, ctx *webRequestCtx)
 	return nil, false
 }
 
-func renderHTML(fileName string, values map[string]interface{}, layout bool) string {
+func renderHTML(fileName string, values map[string]any, layout bool) string {
 	html := AssetGetContent("tpl/" + fileName)
 	myFn := template.FuncMap{
 		"myTime": func(t time.Time) string {
@@ -397,7 +393,7 @@ func (man *ProxyManager) handelQuery(w http.ResponseWriter, req *http.Request, c
 
 func (man *ProxyManager) handelFetch(w http.ResponseWriter, _ *http.Request, ctx *webRequestCtx) {
 	if !ctx.isLogin {
-		data := map[string]interface{}{
+		data := map[string]any{
 			"ErrNo": 1,
 			"Proxy": "proxy auth failed",
 		}
@@ -407,7 +403,7 @@ func (man *ProxyManager) handelFetch(w http.ResponseWriter, _ *http.Request, ctx
 	}
 	proxy, err := man.proxyPool.getOneProxy(ctx.user.Name)
 	if err != nil {
-		data := map[string]interface{}{
+		data := map[string]any{
 			"ErrNo":   2,
 			"Message": err.Error(),
 		}
@@ -415,7 +411,7 @@ func (man *ProxyManager) handelFetch(w http.ResponseWriter, _ *http.Request, ctx
 		ctx.addLogMsg("fetch failed:", err.Error())
 		return
 	}
-	data := map[string]interface{}{
+	data := map[string]any{
 		"ErrNo": 0,
 		"Proxy": proxy.proxy,
 	}
@@ -427,7 +423,7 @@ func notLoginHandler(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte("proxy auth failed"))
 }
 
-func writeJSON(w http.ResponseWriter, status int, data interface{}) {
+func writeJSON(w http.ResponseWriter, status int, data any) {
 	bf, _ := json.Marshal(data)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

@@ -92,6 +92,7 @@ func (p *Proxy) IsOk() bool {
 func (p *Proxy) IncrUsed() {
 	atomic.AddInt64(&p.Used, 1)
 }
+
 func (p *Proxy) GetUsed() int64 {
 	return atomic.LoadInt64(&p.Used)
 }

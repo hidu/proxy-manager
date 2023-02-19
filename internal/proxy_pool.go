@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -27,7 +28,6 @@ type ProxyPool struct {
 	Count      *proxyCount
 	activeList ProxyList // 活跃可用的
 	allList    ProxyList // 所有的
-
 }
 
 // loadPool 从配置文件中加载代理池
@@ -165,7 +165,7 @@ func (p *ProxyPool) removeProxy(proxyURL string) {
 	p.activeList.Remove(proxyURL)
 }
 
-var errorNoProxy = fmt.Errorf("no active proxy")
+var errorNoProxy = errors.New("no active proxy")
 
 func (p *ProxyPool) getOneProxy(uname string) (*Proxy, error) {
 	if p.activeList.Total() == 0 {
@@ -205,7 +205,7 @@ func (p *ProxyPool) runTest() {
 	})
 	wg.Wait()
 
-	used := time.Now().Sub(start)
+	used := time.Since(start)
 	log.Println("test all proxy finish, total:", proxyTotal, "used:", used, "activeTotal:", len(p.ActiveList()))
 
 	p.cleanBadProxy(24 * time.Hour)
@@ -244,8 +244,8 @@ func (p *ProxyPool) testProxy(proxy *Proxy) bool {
 
 	proxy.StatusCode = proxyStatusUnavailable
 
-	testlog := func(msg ...interface{}) {
-		proxy.CheckUsed = time.Now().Sub(start)
+	testlog := func(msg ...any) {
+		proxy.CheckUsed = time.Since(start)
 		proxy.LastCheck = start
 		log.Println("test proxy", proxy.proxy, fmt.Sprint(msg...), "used:", proxy.CheckUsed, "ms")
 	}

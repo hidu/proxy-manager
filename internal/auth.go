@@ -28,6 +28,7 @@ func (u *User) pswEq(psw string) bool {
 func (u *User) PswEnc() string {
 	return StrMd5(fmt.Sprintf("%s:%s", u.Name, u.PasswordMd5))
 }
+
 func (u *User) Eq(u1 *User) bool {
 	return u != nil && u.Name == u1.Name && u.PasswordMd5 == u1.PasswordMd5
 }

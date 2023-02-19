@@ -15,7 +15,7 @@ var initConf = flag.Bool("init", false, "create config files if not exists")
 func main() {
 	flag.Usage = func() {
 		fmt.Println("proxy manager\n  version:", internal.GetVersion())
-		fmt.Printf("  https://github.com/hidu/proxy-manager/\n\n")
+		fmt.Print("  https://github.com/hidu/proxy-manager/\n\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()

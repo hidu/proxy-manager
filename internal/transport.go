@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -58,7 +59,7 @@ func init() {
 	// shadowsocks
 	proxyTransports["ss"] = func(proxyURL *url.URL) (*http.Transport, error) {
 		if proxyURL.User == nil {
-			return nil, fmt.Errorf("wrong shadowsocks uri,need method and passwd")
+			return nil, errors.New("wrong shadowsocks uri,need method and passwd")
 		}
 		psw, _ := proxyURL.User.Password()
 		cipher, err := ss.NewCipher(proxyURL.User.Username(), psw)
@@ -75,7 +76,6 @@ func init() {
 			// 			},
 		}, nil
 	}
-
 }
 
 func newClient(proxyURL *url.URL, timeout time.Duration) (*http.Client, error) {
