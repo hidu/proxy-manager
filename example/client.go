@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 )
 
 var proxy = flag.String("proxy", "http://127.0.0.1:8128", "proxy info")
@@ -28,7 +29,7 @@ func main() {
 		req.Header.Set("X-Man-Status-Ok", *status_ok)
 	}
 	if *retry > -1 {
-		req.Header.Set("X-Man-Retry", fmt.Sprintf("%d", *retry))
+		req.Header.Set("X-Man-Retry", strconv.Itoa(*retry))
 	}
 	resp, err := client.Do(req)
 	fmt.Println("err:", err)

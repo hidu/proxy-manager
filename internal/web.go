@@ -182,7 +182,7 @@ func (man *ProxyManager) handelLogout(w http.ResponseWriter, req *http.Request, 
 		_, _ = w.Write([]byte("<script>location.reload()</script>"))
 		return
 	}
-	http.Redirect(w, req, "/", 302)
+	http.Redirect(w, req, "/", http.StatusFound)
 }
 
 func (man *ProxyManager) handelStatus(w http.ResponseWriter, _ *http.Request, _ *webRequestCtx) {

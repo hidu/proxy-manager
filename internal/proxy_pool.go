@@ -6,13 +6,14 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/fsgo/fsenv"
-	"github.com/hidu/goutils/fs"
 	"github.com/hidu/goutils/str_util"
 )
 
@@ -213,7 +214,7 @@ func (p *ProxyPool) runTest() {
 	testResultFile := filepath.Join(fsenv.ConfRootDir(), "pool_checked.conf")
 
 	all := p.allList.String()
-	fs.FilePutContents(testResultFile, []byte(all))
+	_ = os.WriteFile(testResultFile, []byte(all), 0666)
 }
 
 // testProxyAddActive 测试一个代理是否可用 若可用则加入代理池否则删除
@@ -333,12 +334,17 @@ func (p *ProxyPool) cleanBadProxy(dur time.Duration) {
 		}
 		return true
 	})
+	if len(proxyBad) == 0 {
+		return
+	}
+	fp := filepath.Join(fsenv.ConfRootDir(), "pool_bad.list")
 
+	var ss []string
 	for _, proxy := range proxyBad {
 		p.removeProxy(proxy.proxy)
-		fp := filepath.Join(fsenv.ConfRootDir(), "pool_bad.list")
-		fs.FilePutContents(fp, []byte(proxy.String()+"\n"), fs.FILE_APPEND)
+		ss = append(ss, proxy.String())
 	}
+	_ = os.WriteFile(fp, []byte(strings.Join(ss, "\n")), 0666)
 }
 
 func (p *ProxyPool) ActiveList() map[string]*Proxy {

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -27,10 +26,6 @@ type ProxyManager struct {
 	users      map[string]*User
 	reqNum     int64
 	mux        sync.RWMutex
-}
-
-func init() {
-	rand.Seed(time.Now().UnixNano())
 }
 
 // NewProxyManager init server

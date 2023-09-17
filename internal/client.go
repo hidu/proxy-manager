@@ -200,7 +200,7 @@ func (hc *httpClient) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 
 	w.Header().Set("x-man-try", fmt.Sprintf("%d/%d", no, maxReTry))
-	w.Header().Set("x-man-id", fmt.Sprintf("%d", rlog.logID))
+	w.Header().Set("x-man-id", strconv.FormatInt(rlog.logID, 10))
 
 	if err != nil || resp == nil {
 		w.WriteHeader(550)
@@ -279,7 +279,7 @@ func (hc *httpClient) handlerHTTPS(w http.ResponseWriter, req *http.Request, use
 	conn.SetDeadline(deadLine)
 
 	sConn.Write([]byte("CONNECT " + req.URL.Host + " HTTP/1.1\r\n"))
-	sConn.Write([]byte("Connetion: close\r\n"))
+	sConn.Write([]byte("Connection: close\r\n"))
 	sConn.Write([]byte("Host: " + req.URL.Host + "\r\n\r\n"))
 
 	if err = connCopyLimit(conn, sConn); err != nil {
@@ -287,19 +287,32 @@ func (hc *httpClient) handlerHTTPS(w http.ResponseWriter, req *http.Request, use
 		return
 	}
 
+	var closeOnce sync.Once
+	doClose := func() {
+		closeOnce.Do(func() {
+			sConn.Close()
+			conn.Close()
+		})
+	}
+
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(3)
 	go func() {
 		defer wg.Done()
 		n, e := io.Copy(conn, sConn)
 		rlog.addLog("copy.toClient", n, e)
-		sConn.Close()
-		conn.Close()
+		doClose()
 	}()
 	go func() {
 		defer wg.Done()
 		n, e := io.Copy(sConn, conn)
 		rlog.addLog("copy.toServer", n, e)
+		doClose()
+	}()
+	go func() {
+		defer wg.Done()
+		<-req.Context().Done()
+		doClose()
 	}()
 	wg.Wait()
 	rlog.addLog("https handler finished")

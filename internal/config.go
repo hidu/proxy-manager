@@ -99,10 +99,10 @@ func InitConf(confDir string) {
 		log.Fatalln("err:", err)
 	}
 
-	stat, err = os.Stat("proxy.toml")
+	_, err = os.Stat("proxy.toml")
 
-	if os.IsExist(err) {
-		log.Fatalln("proxy.toml exists!")
+	if err == nil {
+		log.Fatalln("proxy.toml already exists!")
 	}
 
 	os.WriteFile("proxy.toml", AssetGetContent("conf/proxy.toml"), 0644)

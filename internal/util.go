@@ -60,13 +60,10 @@ func getHostPortFromURL(urlStr string) (host string, port int, err error) {
 		case "http":
 		case "ws":
 			port = 80
-			break
 		case "https":
 		case "wss":
 			port = 443
-			break
 		default:
-			break
 		}
 	}
 	return
@@ -95,11 +92,8 @@ func ReduceHTMLSpace(html string) string {
 func SetInterval(call func(), dur time.Duration) *time.Ticker {
 	ticker := time.NewTicker(dur)
 	go func() {
-		for {
-			select {
-			case <-ticker.C:
-				call()
-			}
+		for range ticker.C {
+			call()
 		}
 	}()
 	return ticker
