@@ -65,7 +65,6 @@ func setEnv(cfp string) {
 	fsenv.SetRootDir(rootDir)
 }
 
-// Start start server
 func (man *ProxyManager) Start() {
 	addr := fmt.Sprintf("%s:%d", "", man.config.Port)
 	log.Println("start proxy manager at:", addr)
@@ -73,7 +72,6 @@ func (man *ProxyManager) Start() {
 	log.Println("proxy server exit:", err)
 }
 
-// ServeHTTP ServeHTTP
 func (man *ProxyManager) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	host, portInt, err := getHostPortFromReq(req)
 	if err != nil {

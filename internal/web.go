@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strconv"
 	"strings"
 	"text/template"
@@ -186,14 +187,17 @@ func (man *ProxyManager) handelLogout(w http.ResponseWriter, req *http.Request, 
 }
 
 func (man *ProxyManager) handelStatus(w http.ResponseWriter, _ *http.Request, _ *webRequestCtx) {
-	values := make(map[string]any)
-	values["StartTime"] = man.startTime.Format(timeFormatStd)
-	values["Version"] = version
-	values["Request"] = man.proxyPool.Count
-	values["AliveCheckURL"] = man.config.AliveCheckURL
-	values["AliveCheckInterval"] = man.config.getCheckInterval().String()
-	values["Timeout"] = man.proxyPool.config.getTimeout().String()
-	values["ProxyDetail"] = man.proxyPool.GetProxyNumbers()
+	values := map[string]any{
+		"StartTime":          man.startTime.Format(timeFormatStd),
+		"Version":            version,
+		"Request":            man.proxyPool.Count,
+		"AliveCheckURL":      man.config.AliveCheckURL,
+		"AliveCheckInterval": man.config.getCheckInterval().String(),
+		"Timeout":            man.proxyPool.config.getTimeout().String(),
+		"ProxyDetail":        man.proxyPool.GetProxyNumbers(),
+		"NumGoroutine":       runtime.NumGoroutine(),
+	}
+
 	bs, _ := json.Marshal(values)
 	_, _ = w.Write(bs)
 }
