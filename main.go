@@ -6,6 +6,8 @@ import (
 	"log"
 	"path/filepath"
 
+	"github.com/fsgo/fsconf/confext"
+
 	"github.com/hidu/proxy-manager/internal"
 )
 
@@ -19,6 +21,8 @@ func init() {
 		flag.PrintDefaults()
 	}
 	log.SetFlags(log.Lshortfile | log.LstdFlags | log.Ldate)
+
+	confext.Init()
 }
 
 func main() {

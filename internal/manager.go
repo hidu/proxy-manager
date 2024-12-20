@@ -37,7 +37,7 @@ func NewProxyManager(configPath string) *ProxyManager {
 	}
 
 	setEnv(configPath)
-	setupLog(filepath.Join(fsenv.LogRootDir(), "proxy.log"))
+	setupLog(filepath.Join(fsenv.LogDir(), "proxy.log"))
 
 	manager := &ProxyManager{
 		startTime: time.Now(),
@@ -60,7 +60,7 @@ func setEnv(cfp string) {
 		log.Fatalln(err)
 	}
 	confDir := filepath.Dir(abs)
-	fsenv.SetConfRootDir(confDir)
+	fsenv.SetConfDir(confDir)
 	rootDir := filepath.Dir(confDir)
 	fsenv.SetRootDir(rootDir)
 }
@@ -95,7 +95,7 @@ func (man *ProxyManager) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func (man *ProxyManager) loadUsers() {
-	users, err := loadUsers(filepath.Join(fsenv.ConfRootDir(), "users.toml"))
+	users, err := loadUsers(filepath.Join(fsenv.ConfDir(), "users.toml"))
 	if err != nil {
 		log.Println("loadUsers err:", err)
 		return

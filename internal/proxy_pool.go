@@ -84,7 +84,7 @@ func (p *ProxyPool) String() string {
 }
 
 func (p *ProxyPool) parserConf(confName string) (ProxyList, error) {
-	confPath := filepath.Join(fsenv.ConfRootDir(), confName)
+	confPath := filepath.Join(fsenv.ConfDir(), confName)
 	txtFile, err := str_util.NewTxtFile(confPath)
 	if err != nil {
 		return ProxyList{}, err
@@ -211,7 +211,7 @@ func (p *ProxyPool) runTest() {
 
 	p.cleanBadProxy(24 * time.Hour)
 
-	testResultFile := filepath.Join(fsenv.ConfRootDir(), "pool_checked.conf")
+	testResultFile := filepath.Join(fsenv.ConfDir(), "pool_checked.conf")
 
 	all := p.allList.String()
 	_ = os.WriteFile(testResultFile, []byte(all), 0666)
@@ -337,7 +337,7 @@ func (p *ProxyPool) cleanBadProxy(dur time.Duration) {
 	if len(proxyBad) == 0 {
 		return
 	}
-	fp := filepath.Join(fsenv.ConfRootDir(), "pool_bad.list")
+	fp := filepath.Join(fsenv.ConfDir(), "pool_bad.list")
 
 	var ss []string
 	for _, proxy := range proxyBad {
