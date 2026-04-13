@@ -1,13 +1,11 @@
 proxy-manager
-============
-v0.3.0
 
 ## 概述
 1.  统一管理 http、https、socks4、socks4a、socks5、shadowsocks 代理
 2.  自动检查代理是否可用
-3.  对外统一提供http代理服务
-4.  对外代理服务支持http basic认证
-5.  支持通过接口添加代理
+3.  对外统一提供 HTTP/HTTPS 代理服务
+4.  对外代理服务支持 HTTP Basic 认证
+5.  支持通过接口添加代理地址、获取可用代理
 
 ## 安装
 ### 使用源码安装
@@ -17,39 +15,8 @@ go install github.com/hidu/proxy-manager@master
 ```
 
 ## 配置
-### 初始化配置
-```
-proxy-manager -init
-```
 ### 配置文件
-<table>
-<thead>
- <tr>
-    <th>文件名</th>
-    <th>说明</th>
- </tr>
-</thead>
-<tbody>
-  <tr>
-    <td>proxy.toml</td>
-    <td>主配置文件</td>
-  </tr>
-  <tr>
-    <td>pool.conf</td>
-    <td>代理池，每行配置一个代理，每次启动都会加载检查</td>
-  </tr>
-  <tr>
-    <td>pool_checked.list</td>
-    <td>程序生成，当前检查可用的代理结果</td>
-  </tr>
-  <tr>
-    <td>pool_bad.list</td>
-    <td>程序生成，不可用的代理列表</td>
-  </tr>
-</tbody>
-</table>
-
-
+ 参考项目 [conf](./conf) 目录内的配置。
 
 ## 运行
 ```bash
@@ -57,21 +24,35 @@ proxy-manager
 
 or
 
-proxy-manager -conf ./conf/proxy.toml
+proxy-manager -conf ./conf/app.yml
 ```
 
 
-## 使用流程
-假设服务监听地址为：`127.0.0.1:8128`
+## 使用
+ 1. 将固定的代理配置添加到 `conf/proxies.yml` 文件中
+ 2. 在 `conf/users.yml` 中配置用户 (登录管理页面 和 使用代理时会用) 
+ 3. 启动服务，服务监听地址默认为：`127.0.0.1:8128`
+ 4. 在浏览器中访问 `http://127.0.0.1:8128` 可以进入管理页面 
 
-### As Proxy Server
-支持访问 http URL，暂不支持 https URL。
+`http://127.0.0.1:8128` 即提供了管理页面，同时也提供了 HTTP / HTTPS 代理功能。
+
+### 作为 HTTP / HTTPS 代理
+比如：
 ```
-curl -x http://$name:$psw@127.0.0.1:8128 'http://hidu.github.io/hello.md'
+# 在 conf/app.yml 中配置了 AuthType="no" （不需要代理认证）时：
+curl -x http://127.0.0.1:8128 'https://hidu.github.io/hello.md'
+```
+或者
+```
+# 在 conf/app.yml 中配置了 AuthType="basic" 或 "basic_any" （需要代理认证）时：
+curl -x http://$name:$psw@127.0.0.1:8128 'https://hidu.github.io/hello.md'
 ```
 
-### As Gateway Server
-支持访问 http 和 https URL 。
+
+### API
+
+#### /query: 作为普通服务，转发请求
+
 ```bash
 # 发送 GET 请求
 curl 'http://$name:$psw@127.0.0.1:8128/query?url=https://hidu.github.io/hello.md
@@ -81,26 +62,19 @@ curl 'http://$name:$psw@127.0.0.1:8128/query?method=POST&url=https://hidu.github
   -X POST --data "request body"
 ```
 
-获取一个 Proxy
+#### /fetch: 返回一个可用的代理服务器
 ```bash
  curl 'http://$name:$psw@127.0.0.1:8128/fetch'
 ```
 
-成功的 Response：
-```json
-{
-    "ErrNo": 0,
-    "Proxy": "http://127.0.0.1:8101"
-}
-```
 
-## 外部接口
-
-### 添加代理接口
+#### /add: 添加代理
 ```
 curl 命令示例：
 curl --data "user_name=admin&psw_md5=7bb483729b5a8e26f73e1831cde5b842&proxy=http://10.0.1.9:3128" http://127.0.0.1:8128/add
 ```
 
-### 服务状态接口
-http://127.0.0.1:8128/status
+#### /status: 服务状态接口
+```
+curl http://127.0.0.1:8128/status
+```
