@@ -8,11 +8,12 @@ proxy-manager
 5.  支持通过接口添加代理地址、获取可用代理
 
 ## 安装
-### 使用源码安装
-需要安装[Go](https://golang.org/dl/  "下载安装")
+使用源码安装:
 ```
 go install github.com/hidu/proxy-manager@master
 ```
+
+或者在 [ releases 页面](https://github.com/hidu/proxy-manager/releases) 下载编译好的二进制。
 
 ## 配置
 ### 配置文件
@@ -29,7 +30,7 @@ proxy-manager -conf ./conf/app.yml
 
 
 ## 使用
- 1. 将固定的代理配置添加到 `conf/proxies.yml` 文件中
+ 1. 将固定的代理配置添加到 `conf/proxies.yml` 文件中 (每次重启后都会加载)
  2. 在 `conf/users.yml` 中配置用户 (登录管理页面 和 使用代理时会用) 
  3. 启动服务，服务监听地址默认为：`127.0.0.1:8128`
  4. 在浏览器中访问 `http://127.0.0.1:8128` 可以进入管理页面 
@@ -58,7 +59,7 @@ curl -x http://$name:$psw@127.0.0.1:8128 'https://hidu.github.io/hello.md'
 curl 'http://$name:$psw@127.0.0.1:8128/query?url=https://hidu.github.io/hello.md
 
 # 发送 POST 请求，并且有设置自定义 Header 以及 Body 
-curl 'http://$name:$psw@127.0.0.1:8128/query?method=POST&url=https://hidu.github.io/hello.md&headers={"a":["a"]}' \
+curl 'http://$name:$psw@127.0.0.1:8128/query?method=POST&url=https://hidu.github.io/hello.md&header={"k1":"v1"}' \
   -X POST --data "request body"
 ```
 

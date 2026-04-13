@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"runtime"
@@ -16,11 +15,12 @@ import (
 
 	"github.com/xanygo/anygo/ds/xurl"
 	"github.com/xanygo/anygo/xattr"
+	"github.com/xanygo/anygo/xlog"
 )
 
 const cookieName = "x-man-proxy"
 
-type webRequestCtx struct {
+type webCtx struct {
 	start   time.Time
 	values  map[string]any
 	user    *User
@@ -29,16 +29,15 @@ type webRequestCtx struct {
 	isLogin bool
 }
 
-func (ctx *webRequestCtx) isAdmin() bool {
-	return ctx.isLogin && ctx != nil && ctx.user.Admin
+func (ctx *webCtx) isAdmin() bool {
+	return ctx != nil && ctx.isLogin && ctx.user.Admin
 }
 
-func (ctx *webRequestCtx) finalLog() {
-	req := ctx.req
-	log.Println(req.RemoteAddr, req.Method, req.RequestURI, "used:", time.Since(ctx.start), "refer:", req.Referer(), "ua:", req.UserAgent(), "logMsg:", ctx.logMsg)
+func (ctx *webCtx) finalLog() {
+	xlog.AddAttr(ctx.req.Context(), xlog.String("CtxFields", ctx.logMsg))
 }
 
-func (ctx *webRequestCtx) addLogMsg(msg ...any) {
+func (ctx *webCtx) addLogMsg(msg ...any) {
 	if ctx.logMsg != "" {
 		ctx.logMsg += ","
 	}
@@ -48,7 +47,7 @@ func (ctx *webRequestCtx) addLogMsg(msg ...any) {
 type adminWeb struct{}
 
 func (man *adminWeb) serveAdminPage(w http.ResponseWriter, req *http.Request) {
-	ctx := &webRequestCtx{
+	ctx := &webCtx{
 		req:   req,
 		start: time.Now(),
 	}
@@ -93,7 +92,7 @@ func (man *adminWeb) serveAdminPage(w http.ResponseWriter, req *http.Request) {
 	ctx.user = user
 	ctx.isLogin = isLogin
 
-	funcMap := make(map[string]func(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx))
+	funcMap := make(map[string]func(w http.ResponseWriter, req *http.Request, ctx *webCtx))
 
 	funcMap["/"] = man.handelIndex
 	funcMap["/about"] = man.handelAbout
@@ -112,7 +111,7 @@ func (man *adminWeb) serveAdminPage(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func (man *adminWeb) handelIndex(w http.ResponseWriter, _ *http.Request, ctx *webRequestCtx) {
+func (man *adminWeb) handelIndex(w http.ResponseWriter, _ *http.Request, ctx *webCtx) {
 	values := ctx.values
 	usedTotal := defaultRelay.usedTotal.Load()
 	usedSuccess := defaultRelay.usedSuccess.Load()
@@ -126,7 +125,7 @@ func (man *adminWeb) handelIndex(w http.ResponseWriter, _ *http.Request, ctx *we
 	_, _ = w.Write([]byte(code))
 }
 
-func (man *adminWeb) handelAdd(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
+func (man *adminWeb) handelAdd(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
 	values := ctx.values
 	doPost := func() {
 		if !ctx.isAdmin() {
@@ -176,13 +175,13 @@ func (man *adminWeb) handelAdd(w http.ResponseWriter, req *http.Request, ctx *we
 	http.NotFound(w, req)
 }
 
-func (man *adminWeb) handelAbout(w http.ResponseWriter, _ *http.Request, ctx *webRequestCtx) {
+func (man *adminWeb) handelAbout(w http.ResponseWriter, _ *http.Request, ctx *webCtx) {
 	values := ctx.values
 	code := renderHTML("about.html", values, true)
 	_, _ = w.Write([]byte(code))
 }
 
-func (man *adminWeb) handelLogout(w http.ResponseWriter, req *http.Request, _ *webRequestCtx) {
+func (man *adminWeb) handelLogout(w http.ResponseWriter, req *http.Request, _ *webCtx) {
 	cookie := &http.Cookie{Name: cookieName, Value: "", Path: "/"}
 	http.SetCookie(w, cookie)
 	if _, _, ok := req.BasicAuth(); ok {
@@ -193,7 +192,7 @@ func (man *adminWeb) handelLogout(w http.ResponseWriter, req *http.Request, _ *w
 	http.Redirect(w, req, "/", http.StatusFound)
 }
 
-func (man *adminWeb) handelStatus(w http.ResponseWriter, _ *http.Request, _ *webRequestCtx) {
+func (man *adminWeb) handelStatus(w http.ResponseWriter, _ *http.Request, _ *webCtx) {
 	values := map[string]any{
 		"StartTime": xattr.StartTime().Format(timeFormatStd),
 		"Version":   version,
@@ -219,7 +218,7 @@ func init() {
 }
 
 // handelTest  测试一个代理是否可以正常使用
-func (man *adminWeb) handelTest(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
+func (man *adminWeb) handelTest(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
 	values := ctx.values
 	doPost := func() {
 		token := req.PostFormValue("token")
@@ -291,7 +290,7 @@ func (man *adminWeb) handelTest(w http.ResponseWriter, req *http.Request, ctx *w
 	http.NotFound(w, req)
 }
 
-func (man *adminWeb) handelLogin(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
+func (man *adminWeb) handelLogin(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
 	values := ctx.values
 	if req.Method == "POST" {
 		name := req.PostFormValue("name")
@@ -317,7 +316,7 @@ func (man *adminWeb) handelLogin(w http.ResponseWriter, req *http.Request, ctx *
 	}
 }
 
-func (man *adminWeb) handelCheckLogin(req *http.Request, ctx *webRequestCtx) (user *User, isLogin bool) {
+func (man *adminWeb) handelCheckLogin(req *http.Request, ctx *webCtx) (user *User, isLogin bool) {
 	if req == nil {
 		return nil, false
 	}
@@ -378,7 +377,7 @@ func renderHTML(fileName string, values map[string]any, layout bool) string {
 	return body
 }
 
-func (man *adminWeb) handelQuery(w http.ResponseWriter, req *http.Request, ctx *webRequestCtx) {
+func (man *adminWeb) handelQuery(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
 	if !ctx.isLogin {
 		notLoginHandler(w, req)
 		return
@@ -414,7 +413,7 @@ func (man *adminWeb) handelQuery(w http.ResponseWriter, req *http.Request, ctx *
 }
 
 // handelFetch 获取一个代理服务器
-func (man *adminWeb) handelFetch(w http.ResponseWriter, _ *http.Request, ctx *webRequestCtx) {
+func (man *adminWeb) handelFetch(w http.ResponseWriter, _ *http.Request, ctx *webCtx) {
 	if !ctx.isLogin {
 		data := map[string]any{
 			"Code": 1,

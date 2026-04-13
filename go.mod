@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	github.com/shadowsocks/go-shadowsocks2 v0.1.5
-	github.com/xanygo/anygo v0.0.0-20260413033519-d2ab57348a7d
+	github.com/xanygo/anygo v0.0.0-20260413060704-ea93067706b1
 	github.com/xanygo/ext v0.0.0-20260228134916-3cc748f50bb3
 	golang.org/x/net v0.53.0
 	gopkg.in/yaml.v3 v3.0.1

@@ -1,5 +1,9 @@
+# 应用主配置文件
 Listen:
+  # 服务监听地址，管理页面和 HTTP/HTTPS proxy都是此地址
   main: "{env.Listen|127.0.0.1:8128}"
+
+# 以下配置内容均为可选
 
 SiteTitle: "站点名称"                  # 可选
 SiteNotice: "这个是公告，o(∩∩)o...哈哈"  # 可选

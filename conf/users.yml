@@ -1,8 +1,9 @@
+# 用户列表
 Users:
-  - Name: "admin"
-    Password: "psw"
+  - Name: "admin"    # 用户名，必填
+    Password: "psw"  # 密码，Password 和 PasswordMd5 二者至少填写一个
     PasswordMd5: ""
-    Admin: true
+    Admin: true      # 是否管理员，只有管理员才能登录管理页面
 
   - Name: "abc"
     Password: "abc"
