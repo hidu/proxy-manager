@@ -32,3 +32,8 @@ func Get(proxyURL *url.URL) (*Transporter, error) {
 	}
 	return gf(proxyURL), nil
 }
+
+func HasScheme(scheme string) bool {
+	_, ok := registry[scheme]
+	return ok
+}

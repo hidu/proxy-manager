@@ -58,7 +58,7 @@ func (man *adminWeb) serveAdminPage(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	user, isLogin := man.handelCheckLogin(req, ctx)
+	user, isLogin := man.handleCheckLogin(req, ctx)
 
 	values := make(map[string]any)
 
@@ -95,14 +95,15 @@ func (man *adminWeb) serveAdminPage(w http.ResponseWriter, req *http.Request) {
 	funcMap := make(map[string]func(w http.ResponseWriter, req *http.Request, ctx *webCtx))
 
 	funcMap["/"] = man.handelIndex
-	funcMap["/about"] = man.handelAbout
-	funcMap["/add"] = man.handelAdd
-	funcMap["/test"] = man.handelTest
-	funcMap["/login"] = man.handelLogin
-	funcMap["/logout"] = man.handelLogout
-	funcMap["/status"] = man.handelStatus
-	funcMap["/query"] = man.handelQuery
-	funcMap["/fetch"] = man.handelFetch
+	funcMap["/about"] = man.handleAbout
+	funcMap["/add"] = man.handleAdd
+	funcMap["/test"] = man.handleTest
+	funcMap["/login"] = man.handleLogin
+	funcMap["/logout"] = man.handleLogout
+	funcMap["/status"] = man.handleStatus
+	funcMap["/query"] = man.handleQuery
+	funcMap["/fetch"] = man.handleFetch
+	funcMap["/clean"] = man.handeClean
 
 	if fn, has := funcMap[req.URL.Path]; has {
 		fn(w, req, ctx)
@@ -125,7 +126,8 @@ func (man *adminWeb) handelIndex(w http.ResponseWriter, _ *http.Request, ctx *we
 	_, _ = w.Write([]byte(code))
 }
 
-func (man *adminWeb) handelAdd(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
+// handleAdd 添加新代理地址
+func (man *adminWeb) handleAdd(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
 	values := ctx.values
 	doPost := func() {
 		if !ctx.isAdmin() {
@@ -150,14 +152,16 @@ func (man *adminWeb) handelAdd(w http.ResponseWriter, req *http.Request, ctx *we
 		}
 		n := 0
 		proxies.Range(func(proxyURL string, p *proxyEntry) bool {
-			if pool.addProxy(p) {
+			if pool.all.Add(p) {
 				n++
+				pool.dyn.Add(p)
 			}
 			return true
 		})
 
 		if n > 0 {
 			go pool.runTest()
+			pool.SaveTempToFile()
 		}
 		_, _ = fmt.Fprintf(w, "<script>alert('add %d new proxy');</script>", n)
 		ctx.addLogMsg("add new proxy total:", n)
@@ -175,13 +179,13 @@ func (man *adminWeb) handelAdd(w http.ResponseWriter, req *http.Request, ctx *we
 	http.NotFound(w, req)
 }
 
-func (man *adminWeb) handelAbout(w http.ResponseWriter, _ *http.Request, ctx *webCtx) {
+func (man *adminWeb) handleAbout(w http.ResponseWriter, _ *http.Request, ctx *webCtx) {
 	values := ctx.values
 	code := renderHTML("about.html", values, true)
 	_, _ = w.Write([]byte(code))
 }
 
-func (man *adminWeb) handelLogout(w http.ResponseWriter, req *http.Request, _ *webCtx) {
+func (man *adminWeb) handleLogout(w http.ResponseWriter, req *http.Request, _ *webCtx) {
 	cookie := &http.Cookie{Name: cookieName, Value: "", Path: "/"}
 	http.SetCookie(w, cookie)
 	if _, _, ok := req.BasicAuth(); ok {
@@ -192,7 +196,7 @@ func (man *adminWeb) handelLogout(w http.ResponseWriter, req *http.Request, _ *w
 	http.Redirect(w, req, "/", http.StatusFound)
 }
 
-func (man *adminWeb) handelStatus(w http.ResponseWriter, _ *http.Request, _ *webCtx) {
+func (man *adminWeb) handleStatus(w http.ResponseWriter, _ *http.Request, _ *webCtx) {
 	values := map[string]any{
 		"StartTime": xattr.StartTime().Format(timeFormatStd),
 		"Version":   version,
@@ -217,8 +221,8 @@ func init() {
 	staticToken = strconv.FormatInt(xattr.StartTime().UnixNano(), 10)
 }
 
-// handelTest  测试一个代理是否可以正常使用
-func (man *adminWeb) handelTest(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
+// handleTest  测试一个代理是否可以正常使用
+func (man *adminWeb) handleTest(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
 	values := ctx.values
 	doPost := func() {
 		token := req.PostFormValue("token")
@@ -290,7 +294,7 @@ func (man *adminWeb) handelTest(w http.ResponseWriter, req *http.Request, ctx *w
 	http.NotFound(w, req)
 }
 
-func (man *adminWeb) handelLogin(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
+func (man *adminWeb) handleLogin(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
 	values := ctx.values
 	if req.Method == "POST" {
 		name := req.PostFormValue("name")
@@ -316,7 +320,7 @@ func (man *adminWeb) handelLogin(w http.ResponseWriter, req *http.Request, ctx *
 	}
 }
 
-func (man *adminWeb) handelCheckLogin(req *http.Request, ctx *webCtx) (user *User, isLogin bool) {
+func (man *adminWeb) handleCheckLogin(req *http.Request, ctx *webCtx) (user *User, isLogin bool) {
 	if req == nil {
 		return nil, false
 	}
@@ -377,7 +381,7 @@ func renderHTML(fileName string, values map[string]any, layout bool) string {
 	return body
 }
 
-func (man *adminWeb) handelQuery(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
+func (man *adminWeb) handleQuery(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
 	if !ctx.isLogin {
 		notLoginHandler(w, req)
 		return
@@ -412,8 +416,8 @@ func (man *adminWeb) handelQuery(w http.ResponseWriter, req *http.Request, ctx *
 	defaultRelay.forwardRequest(req.Context(), w, request, ctx.user.Name)
 }
 
-// handelFetch 获取一个代理服务器
-func (man *adminWeb) handelFetch(w http.ResponseWriter, _ *http.Request, ctx *webCtx) {
+// handleFetch 获取一个代理服务器
+func (man *adminWeb) handleFetch(w http.ResponseWriter, _ *http.Request, ctx *webCtx) {
 	if !ctx.isLogin {
 		data := map[string]any{
 			"Code": 1,
@@ -439,6 +443,15 @@ func (man *adminWeb) handelFetch(w http.ResponseWriter, _ *http.Request, ctx *we
 		"Proxies": []string{one.Base.Proxy},
 	}
 	writeJSON(w, http.StatusOK, data)
+}
+
+func (man *adminWeb) handeClean(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
+	if !ctx.isAdmin() {
+		notLoginHandler(w, req)
+		return
+	}
+	ret := pool.DynClean()
+	writeJSON(w, http.StatusOK, ret)
 }
 
 func notLoginHandler(w http.ResponseWriter, _ *http.Request) {

@@ -7,16 +7,24 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/xanygo/anygo/ds/xsync"
 	"github.com/xanygo/anygo/xattr"
+	"github.com/xanygo/anygo/xerror"
 	"github.com/xanygo/anygo/xio/xfs"
 	"github.com/xanygo/anygo/xlog"
 )
+
+// 支持动态修改的代理配置列表
+const dynCfgName = "dyn.yml"
+
+func dynCfgPath() string {
+	return filepath.Join(xattr.ConfDir(), dynCfgName)
+}
 
 // ProxyPool 代理池
 type ProxyPool struct {
@@ -25,6 +33,11 @@ type ProxyPool struct {
 
 	active *ProxyList // 活跃可用的
 	all    *ProxyList // 所有的
+
+	primary *ProxyList // 主配置，由 conf/proxies.yml 加载而来
+
+	// 动态配置，由 conf/dyn.yml 加载而来
+	dyn *ProxyList
 }
 
 var pool *ProxyPool
@@ -32,12 +45,14 @@ var pool *ProxyPool
 // loadPool 从配置文件中加载代理池
 func loadPool() *ProxyPool {
 	p := &ProxyPool{
-		limiter: make(chan struct{}, 100),
+		limiter: make(chan struct{}, 64),
 		all:     newProxyList(nil),
 		active:  newProxyList(nil),
+		primary: newProxyList(nil),
+		dyn:     newProxyList(nil),
 	}
 
-	p.loadToAll("proxies.yml")
+	p.loadProxies()
 
 	go p.runTest()
 
@@ -48,13 +63,29 @@ func loadPool() *ProxyPool {
 	return p
 }
 
-func (p *ProxyPool) loadToAll(name string) {
-	pl, err := p.parserConfigFile(name)
+// loadProxies 加载所有配置文件
+func (p *ProxyPool) loadProxies() {
+	pl, err := p.parserConfigFile("proxies") // 加载 conf/proxies.yml 陪
 	if err != nil {
-		log.Printf("parser %s failed: %v, ignored\n", name, err)
+		log.Printf("load conf/proxies failed: %v, ignored\n", err)
 	}
-	log.Printf("found %d proxies in %s\n", pl.Total(), name)
+	log.Printf("found %d proxies in conf/proxies\n", pl.Total())
+	pl.MergeTo(p.primary)
 	pl.MergeTo(p.all)
+
+	wf := &xfs.WatchFile{
+		FileName: dynCfgPath(),
+		Parser: func(path string) error {
+			temp, err := p.parserConfigFile(dynCfgName)
+			if err == nil && temp != nil {
+				temp.MergeTo(p.dyn)
+				temp.MergeTo(p.all)
+			}
+			return err
+		},
+	}
+	wf.Start()
+
 	log.Println("p.all=", p.all.Total())
 }
 
@@ -68,10 +99,6 @@ func (p *ProxyPool) parserConfigFile(confName string) (*ProxyList, error) {
 		return nil, err
 	}
 	return newProxyList(items), nil
-}
-
-func (p *ProxyPool) addProxy(proxy *proxyEntry) bool {
-	return p.all.Add(proxy)
 }
 
 func (p *ProxyPool) getProxy(proxyURL string) *proxyEntry {
@@ -124,11 +151,16 @@ func (p *ProxyPool) runTest() {
 		xlog.Int("Active", len(p.ActiveList())),
 		xlog.DurationMS("Cost", used),
 	)
+	p.SaveActiveToFile()
+}
 
-	testResultFile := filepath.Join(xattr.TempDir(), "active_proxies.yml")
-	xfs.KeepDirExists(filepath.Dir(testResultFile))
-	all := p.active.String()
-	_ = os.WriteFile(testResultFile, []byte(all), 0666)
+func (p *ProxyPool) SaveActiveToFile() {
+	filename := filepath.Join(xattr.TempDir(), "active_proxies.yml")
+	p.active.SaveFile(filename)
+}
+
+func (p *ProxyPool) SaveTempToFile() {
+	p.dyn.SaveFile(dynCfgPath())
 }
 
 // testProxyAddActive 测试一个代理是否可用 若可用则加入代理池否则删除
@@ -217,4 +249,57 @@ func (p *ProxyPool) ActiveList() map[string]*proxyEntry {
 
 func (p *ProxyPool) All() []*proxyEntry {
 	return p.all.All()
+}
+
+// DynClean 清理 dyn 里无无效的配置
+func (p *ProxyPool) DynClean() any {
+	result := make([]any, 0)
+	var mux sync.Mutex
+
+	ctx := context.Background()
+	var wg xsync.WaitGroup
+	limiter := make(chan struct{}, 8)
+	var deleted atomic.Int32
+	p.dyn.Range(func(proxyURL string, proxy *proxyEntry) bool {
+		wg.Go(func() {
+			limiter <- struct{}{}
+			start := time.Now()
+			err := proxy.TestByDial(ctx)
+			cost := time.Since(start)
+			if err != nil {
+				p.dyn.Remove(proxy)
+				p.all.Remove(proxy)
+
+				deleted.Add(1)
+			}
+			xlog.Info(ctx, "TestByDial",
+				xlog.String("Proxy", proxy.Base.URL.Host),
+				xlog.ErrorAttr("Error", err),
+				xlog.DurationMS("Cost", cost),
+			)
+
+			mux.Lock()
+			info := map[string]any{
+				"Proxy":  proxyURL,
+				"Cost":   cost.String(),
+				"Delete": err != nil,
+				"Err":    xerror.String(err),
+			}
+			result = append(result, info)
+			mux.Unlock()
+
+			<-limiter
+		})
+		return true
+	})
+	wg.Wait()
+
+	if deleted.Load() > 0 {
+		p.SaveTempToFile()
+	}
+	total := map[string]any{
+		"Deleted": deleted.Load(),
+	}
+	result = append(result, total)
+	return result
 }

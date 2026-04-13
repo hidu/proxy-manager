@@ -1,18 +1,28 @@
 package internal
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
+	"strconv"
 	"sync/atomic"
+	"time"
 
 	"github.com/xanygo/anygo/ds/xmap"
 	"github.com/xanygo/anygo/ds/xslice"
 	"github.com/xanygo/anygo/ds/xsync"
 	"github.com/xanygo/anygo/xcfg"
+	"github.com/xanygo/anygo/xio/xfs"
+	"github.com/xanygo/anygo/xlog"
 	"gopkg.in/yaml.v3"
+
+	"github.com/hidu/proxy-manager/internal/transport"
 )
 
 func loadProxies(filename string) ([]*proxyBase, error) {
@@ -38,9 +48,10 @@ type proxyEntry struct {
 
 // Proxy 一个代理
 type proxyBase struct {
-	Proxy  string   `yaml:"Proxy"` // 代理地址，如 http://example.com:8128
-	URL    *url.URL `yaml:"-" json:"-"`
-	Weight int      `yaml:"Weight"`
+	Proxy   string    `yaml:"Proxy"` // 代理地址，如 http://example.com:8128
+	URL     *url.URL  `yaml:"-" json:"-"`
+	Weight  int       `yaml:"Weight,omitempty"`
+	Created time.Time `yaml:"Created,omitempty"`
 }
 
 func (b *proxyBase) ToProxy() *proxyEntry {
@@ -76,9 +87,15 @@ func newProxy(proxyURL string) *proxyEntry {
 	var err error
 	base.URL, err = url.Parse(proxyURL)
 	if err != nil {
-		log.Println("proxy info wrong", err)
+		xlog.Warn(context.Background(), "invalid proxy url", xlog.String("Proxy", proxyURL), xlog.ErrorAttr("Error", err))
 		return nil
 	}
+
+	if !transport.HasScheme(base.URL.Scheme) {
+		xlog.Warn(context.Background(), "invalid proxy scheme", xlog.String("Proxy", proxyURL))
+		return nil
+	}
+
 	return &proxyEntry{
 		Base:  base,
 		State: &proxyState{},
@@ -96,6 +113,23 @@ func (p *proxyEntry) IsOk() bool {
 
 func (p *proxyEntry) GetUsedTotal() int64 {
 	return p.State.UsedTotal.Load()
+}
+
+var zd net.Dialer
+
+func (p *proxyEntry) TestByDial(ctx context.Context) error {
+	host, port, err := getHostPortFromURL(p.Base.Proxy)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	conn, err := zd.DialContext(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+	if err != nil {
+		return err
+	}
+	conn.Close()
+	return nil
 }
 
 func newProxyList(items []*proxyBase) *ProxyList {
@@ -187,6 +221,12 @@ func (pl *ProxyList) String() string {
 	})
 	bf, _ := yaml.Marshal(file)
 	return string(bf)
+}
+
+func (pl *ProxyList) SaveFile(filename string) error {
+	xfs.KeepDirExists(filepath.Dir(filename))
+	content := pl.String()
+	return os.WriteFile(filename, []byte(content), 0666)
 }
 
 func (pl *ProxyList) All() []*proxyEntry {

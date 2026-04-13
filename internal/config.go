@@ -73,6 +73,9 @@ func parserProxiesFromTxt(txt string) *ProxyList {
 		if line == "" {
 			continue
 		}
+		if !strings.HasPrefix(line, "proxy=") {
+			line = "proxy=" + line
+		}
 		fields := strings.Fields(line)
 		val := maps.Clone(defaultValues)
 		for _, field := range fields {
@@ -83,6 +86,7 @@ func parserProxiesFromTxt(txt string) *ProxyList {
 		}
 
 		if p := parseProxyLine(val); p != nil {
+			p.Base.Created = time.Now()
 			pl.Add(p)
 		}
 	}
