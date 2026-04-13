@@ -2,111 +2,111 @@ package internal
 
 import (
 	"log"
-	"os"
+	"maps"
+	"math/rand/v2"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/fsgo/fsconf"
+	"github.com/xanygo/anygo/xattr"
 )
 
-type Config struct {
-	Title  string
-	Notice string
-
-	AliveCheckURL   string // 必填，通过检测这个url来判断代理是否正常
-	AuthType        string // 可选，鉴权类型，可选值 no-不需要鉴权，basic、basic_any-任意帐号
-	WrongStatusCode []int
-
-	Port     int //  必填，服务端口
-	Timeout  int // 可选，超时时间，单位秒,默认 30
-	ReTry    int // 可选，重试次数，默认 2
-	ReTryMax int // 可选，最大重试次数由客户端通过http header [X-Man-Retry]指定
-
-	CheckInterval int // 可选，检测代理有效的间隔时间,单位秒，默认 1800
-}
-
-func (c *Config) IsWrongCode(code int) bool {
-	for i := 0; i < len(c.WrongStatusCode); i++ {
-		if c.WrongStatusCode[i] == code {
-			return true
-		}
+func getAliveCheckURL() string {
+	str, _ := xattr.GetAs[string]("AliveCheckURL")
+	if str != "" && strings.Contains(str, "{rand}") {
+		str = strings.ReplaceAll(str, "{rand}", strconv.Itoa(rand.Int()))
 	}
-	return false
-}
-
-func (c *Config) getAliveCheckURL() string {
-	str := strconv.FormatInt(time.Now().UnixNano(), 10)
-	return strings.ReplaceAll(c.AliveCheckURL, "{%rand}", str)
-}
-
-func (c *Config) getCheckInterval() time.Duration {
-	if c.CheckInterval > 0 {
-		return time.Duration(c.CheckInterval) * time.Second
+	str = strings.TrimSpace(str)
+	if str != "" {
+		return str
 	}
-	return 1800 * time.Second
+	return "https://ifconfig.me/ip"
 }
 
-func (c *Config) getTimeout() time.Duration {
-	if c.Timeout > 0 {
-		return time.Duration(c.Timeout) * time.Second
+func getCheckInterval() time.Duration {
+	val := xattr.GetDefault[time.Duration]("CheckInterval", 0)
+	if val > 0 {
+		return val * time.Second
+	}
+	return 300 * time.Second
+}
+
+func getProxyTimeout() time.Duration {
+	num := xattr.GetDefault[time.Duration]("ProxyTimeout", 0)
+	if num > 0 {
+		return num * time.Second
 	}
 	return 30 * time.Second
 }
 
-func (c *Config) getReTry() int {
-	if c.ReTry > 0 {
-		return c.ReTry
+// 使用代理时候的，默认重试次数
+func getProxyRetry() int {
+	num := xattr.GetDefault[int]("ProxyRetry", 0)
+	if num > 0 {
+		return num
 	}
 	return 2
 }
 
-const (
-	// AuthTypeNO 不需要认证
-	AuthTypeNO = "no"
-
-	// AuthTypeBasic 使用basic
-	AuthTypeBasic = "basic"
-
-	// AuthTypeBasicWithAny 使用basic，任意账号密码都可以
-	AuthTypeBasicWithAny = "basic_any"
-)
-
-func loadConfig(fp string) (*Config, error) {
-	var c *Config
-	err := fsconf.Parse(fp, &c)
-	return c, err
+// 使用代理时候的，最大重试次数
+// 客户端通过 HTTP Header [X-Man-Retry] 指定 ProxyReTry
+func getProxyRetryMax() int {
+	num := xattr.GetDefault[int]("ProxyRetryMax", 0)
+	if num > 0 {
+		return num
+	}
+	return 10
 }
 
-const (
-	confPool        = "pool.conf"
-	confPoolChecked = "pool_checked.conf"
-	confPoolBad     = "pool_bad.conf"
-)
+func parserProxiesFromTxt(txt string) *ProxyList {
+	defaultValues := make(map[string]string)
+	defaultValues["proxy"] = "required"
+	defaultValues["weight"] = "1"
+	lines := strings.Split(txt, "\n")
 
-// InitConf 第一次运行 初始化配置文件目录
-func InitConf(confDir string) {
-	stat, err := os.Stat(confDir)
-	if err == nil {
-		if !stat.IsDir() {
-			log.Fatalln(confDir, "is not dir")
+	pl := newProxyList(nil)
+	for _, line := range lines {
+		if b, _, ok := strings.Cut(line, "#"); ok {
+			line = b
 		}
-	} else {
-		_ = os.MkdirAll(confDir, 0755)
-	}
-	err = os.Chdir(confDir)
-	if err != nil {
-		log.Fatalln("err:", err)
-	}
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		val := maps.Clone(defaultValues)
+		for _, field := range fields {
+			kv := strings.SplitN(field, "=", 2)
+			if len(kv) == 2 {
+				val[kv[0]] = kv[1]
+			}
+		}
 
-	_, err = os.Stat("proxy.toml")
-
-	if err == nil {
-		log.Fatalln("proxy.toml already exists!")
+		if p := parseProxyLine(val); p != nil {
+			pl.Add(p)
+		}
 	}
+	return pl
+}
 
-	os.WriteFile("proxy.toml", AssetGetContent("conf/proxy.toml"), 0644)
-	os.WriteFile(confPool, AssetGetContent("conf/pool.conf"), 0644)
-	os.WriteFile("users.toml", AssetGetContent("conf/users.toml"), 0644)
-	log.Println("init conf done")
+func parseProxyLine(info map[string]string) *proxyEntry {
+	if info == nil {
+		return nil
+	}
+	p := newProxy(info["proxy"])
+	if p == nil {
+		return nil
+	}
+	intValues := make(map[string]int64)
+	intFields := []string{"weight"}
+	var err error
+	for _, fieldName := range intFields {
+		intValues[fieldName], err = strconv.ParseInt(info[fieldName], 10, 60)
+		if err != nil {
+			log.Println("parse [", fieldName, "] failed, not int. err:", err)
+			intValues[fieldName] = 0
+		}
+	}
+	p.Base.Weight = int(intValues["weight"])
+	return p
 }

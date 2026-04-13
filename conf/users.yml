@@ -1,0 +1,8 @@
+Users:
+  - Name: "admin"
+    Password: "psw"
+    PasswordMd5: ""
+    Admin: true
+
+  - Name: "abc"
+    Password: "abc"

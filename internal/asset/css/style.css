@@ -12,8 +12,10 @@ html,body{margin: 0;padding: 0}
   background: #446CB3;
   color:white;
 }
-#menu{  width: 80%;
-  margin: 0 auto
+#menu{
+    width: 80%;
+    margin: 0 auto;
+    padding: 10px 0 10px 0
  }
 #nav ul {
   margin: 0px auto;

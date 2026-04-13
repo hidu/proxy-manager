@@ -1,116 +1,128 @@
 package internal
 
 import (
-	"fmt"
+	"errors"
+	"io/fs"
 	"log"
+	"net/http"
 	"net/url"
-	"strings"
-	"sync"
 	"sync/atomic"
-	"time"
+
+	"github.com/xanygo/anygo/ds/xmap"
+	"github.com/xanygo/anygo/ds/xslice"
+	"github.com/xanygo/anygo/ds/xsync"
+	"github.com/xanygo/anygo/xcfg"
+	"gopkg.in/yaml.v3"
 )
 
-type proxyStatus int
-
-const (
-	proxyStatusUnknown proxyStatus = iota
-	proxyStatusActive
-	proxyStatusUnavailable
-)
-
-func (status proxyStatus) String() string {
-	switch status {
-	case proxyStatusUnknown:
-		return "unknown"
-	case proxyStatusActive:
-		return "active"
-	case proxyStatusUnavailable:
-		return "unavailable"
+func loadProxies(filename string) ([]*proxyBase, error) {
+	config := &ProxiesFile{}
+	err := xcfg.Parse(filename, config)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
 	}
-	return fmt.Sprintf("unknow status:%d", status)
+	return config.Proxies, nil
 }
 
-type proxyUsedStatus int
+type ProxiesFile struct {
+	Proxies []*proxyBase `yaml:"Proxies"`
+}
 
-const (
-	proxyUsedSuc proxyUsedStatus = iota
-	proxyUsedFailed
-)
-
-func (status proxyUsedStatus) String() string {
-	switch status {
-	case proxyUsedSuc:
-		return "success"
-	case proxyUsedFailed:
-		return "failed"
-	}
-	return fmt.Sprintf("unknow status:%d", status)
+type proxyEntry struct {
+	Base  *proxyBase
+	State *proxyState
 }
 
 // Proxy 一个代理
-type Proxy struct {
-	LastCheck   time.Time
-	LastCheckOk time.Time
-	URL         *url.URL
-	Count       *proxyCount
-	proxy       string
-	Weight      int
-	StatusCode  proxyStatus
-	CheckUsed   time.Duration //
-	Used        int64
+type proxyBase struct {
+	Proxy  string   `yaml:"Proxy"` // 代理地址，如 http://example.com:8128
+	URL    *url.URL `yaml:"-" json:"-"`
+	Weight int      `yaml:"Weight"`
 }
 
-func newProxy(proxyURL string) *Proxy {
-	proxy := &Proxy{proxy: proxyURL}
+func (b *proxyBase) ToProxy() *proxyEntry {
 	var err error
-	proxy.URL, err = url.Parse(proxyURL)
+	b.URL, err = url.Parse(b.Proxy)
 	if err != nil {
 		log.Println("proxy info wrong", err)
 		return nil
 	}
-	proxy.Weight = 0
-	proxy.Count = newProxyCount()
-	return proxy
+	return &proxyEntry{
+		Base:  b,
+		State: &proxyState{},
+	}
 }
 
-func (p *Proxy) String() string {
-	return fmt.Sprintf("proxy=%s\tweight=%d\tlast_check=%d\tcheck_used=%s\tstatus=%d\tlast_check_ok=%d",
-		p.proxy,
-		p.Weight,
-		p.LastCheck.Unix(),
-		p.CheckUsed,
-		p.StatusCode,
-		p.LastCheckOk.Unix(),
-	)
+type proxyState struct {
+	LastCheck       xsync.TimeStamp     // 最后检查时间
+	LastCheckOk     xsync.TimeStamp     // 最后检查正常的时间
+	LastCheckStatus atomic.Int64        // 最后一次检查返回的状态码，值为200 才是正常的
+	LastCheckUsed   xsync.TimeDuration  // 最后检查耗时
+	LastCheckMsg    xsync.Value[string] // 最后检查的消息。
+
+	UsedTotal   atomic.Int64 // 被使用的次数
+	UsedSuccess atomic.Int64 // 使用正常的次数
+}
+
+func (ps *proxyState) UsedFailed() int64 {
+	return ps.UsedTotal.Load() - ps.UsedSuccess.Load()
+}
+
+func newProxy(proxyURL string) *proxyEntry {
+	base := &proxyBase{Proxy: proxyURL}
+	var err error
+	base.URL, err = url.Parse(proxyURL)
+	if err != nil {
+		log.Println("proxy info wrong", err)
+		return nil
+	}
+	return &proxyEntry{
+		Base:  base,
+		State: &proxyState{},
+	}
+}
+
+func (p *proxyEntry) String() string {
+	return ""
 }
 
 // IsOk 是否可用状态
-func (p *Proxy) IsOk() bool {
-	return p.StatusCode == proxyStatusActive
+func (p *proxyEntry) IsOk() bool {
+	return p.State.LastCheckStatus.Load() == http.StatusOK
 }
 
-func (p *Proxy) IncrUsed() {
-	atomic.AddInt64(&p.Used, 1)
+func (p *proxyEntry) GetUsedTotal() int64 {
+	return p.State.UsedTotal.Load()
 }
 
-func (p *Proxy) GetUsed() int64 {
-	return atomic.LoadInt64(&p.Used)
+func newProxyList(items []*proxyBase) *ProxyList {
+	pl := &ProxyList{
+		all:  &xslice.Sync[*proxyEntry]{},
+		list: &xmap.Sync[string, *proxyEntry]{},
+	}
+	for _, item := range items {
+		if p := item.ToProxy(); p != nil {
+			pl.Add(p)
+		}
+	}
+	return pl
 }
 
 type ProxyList struct {
-	all    atomic.Value
-	list   sync.Map
+	all    *xslice.Sync[*proxyEntry]
+	list   *xmap.Sync[string, *proxyEntry]
 	nextID int64
 }
 
-func (pl *ProxyList) Range(fn func(proxyURL string, proxy *Proxy) bool) {
-	pl.list.Range(func(key, value any) bool {
-		return fn(key.(string), value.(*Proxy))
-	})
+func (pl *ProxyList) Range(fn func(proxyURL string, proxy *proxyEntry) bool) {
+	pl.list.Range(fn)
 }
 
-func (pl *ProxyList) Add(p *Proxy) bool {
-	_, loaded := pl.list.LoadOrStore(p.proxy, p)
+func (pl *ProxyList) Add(p *proxyEntry) bool {
+	_, loaded := pl.list.LoadOrStore(p.Base.Proxy, p)
 	if !loaded {
 		pl.updateAll()
 	}
@@ -118,15 +130,19 @@ func (pl *ProxyList) Add(p *Proxy) bool {
 }
 
 func (pl *ProxyList) updateAll() {
-	var all []*Proxy
-	pl.Range(func(proxyURL string, proxy *Proxy) bool {
+	var all []*proxyEntry
+	pl.Range(func(proxyURL string, proxy *proxyEntry) bool {
 		all = append(all, proxy)
 		return true
 	})
 	pl.all.Store(all)
 }
 
-func (pl *ProxyList) Remove(key string) bool {
+func (pl *ProxyList) Remove(one *proxyEntry) bool {
+	return pl.RemoveByKey(one.Base.Proxy)
+}
+
+func (pl *ProxyList) RemoveByKey(key string) bool {
 	_, loaded := pl.list.LoadAndDelete(key)
 	if loaded {
 		pl.updateAll()
@@ -134,46 +150,45 @@ func (pl *ProxyList) Remove(key string) bool {
 	return loaded
 }
 
-func (pl *ProxyList) Get(key string) *Proxy {
-	val, has := pl.list.Load(key)
-	if !has {
-		return nil
-	}
-	return val.(*Proxy)
+func (pl *ProxyList) Get(key string) *proxyEntry {
+	val, _ := pl.list.Load(key)
+	return val
 }
 
 func (pl *ProxyList) Total() int {
-	var total int
-	pl.list.Range(func(_, _ any) bool {
-		total++
-		return true
-	})
-	return total
+	return pl.list.Len()
 }
 
 func (pl *ProxyList) MergeTo(to *ProxyList) {
-	pl.list.Range(func(_, value any) bool {
-		to.Add(value.(*Proxy))
+	if pl == nil {
+		return
+	}
+	pl.list.Range(func(key string, value *proxyEntry) bool {
+		to.Add(value)
 		return true
 	})
 }
 
-func (pl *ProxyList) Next() *Proxy {
-	all := pl.all.Load()
-	if all == nil {
+func (pl *ProxyList) Next() *proxyEntry {
+	allProxy := pl.all.Load()
+	if len(allProxy) == 0 {
 		return nil
 	}
 	nextID := atomic.AddInt64(&pl.nextID, 1)
-	allProxy := all.([]*Proxy)
 	index := int(nextID) % len(allProxy)
 	return allProxy[index]
 }
 
 func (pl *ProxyList) String() string {
-	var all []string
-	pl.Range(func(proxyURL string, proxy *Proxy) bool {
-		all = append(all, proxy.String())
+	file := &ProxiesFile{}
+	pl.Range(func(proxyURL string, proxy *proxyEntry) bool {
+		file.Proxies = append(file.Proxies, proxy.Base)
 		return true
 	})
-	return strings.Join(all, "\n") + "\n"
+	bf, _ := yaml.Marshal(file)
+	return string(bf)
+}
+
+func (pl *ProxyList) All() []*proxyEntry {
+	return pl.all.Load()
 }

@@ -3,24 +3,31 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"strconv"
+	"time"
 )
 
 var proxy = flag.String("proxy", "http://127.0.0.1:8128", "proxy info")
-var target = flag.String("url", "http://www.baidu.com", "url get")
-var dumpBody = flag.Bool("body", false, "dump the response body")
+var target = flag.String("url", "https://ifconfig.me/all.json", "url get")
 var status_ok = flag.String("status_ok", "200,304", "x-man-status-ok")
 var retry = flag.Int("retry", -1, "X-Man-ReTry")
 
 func main() {
 	flag.Parse()
+	proxyURL, err := url.Parse(*proxy)
+	if err != nil {
+		log.Fatalf("parser proxy %q: %v\n", *proxy, err)
+	}
 	client := &http.Client{
+		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
 			Proxy: func(req *http.Request) (*url.URL, error) {
-				return url.Parse(*proxy)
+				log.Println("using proxy", proxyURL.String())
+				return proxyURL, nil
 			},
 		},
 	}
@@ -32,7 +39,9 @@ func main() {
 		req.Header.Set("X-Man-Retry", strconv.Itoa(*retry))
 	}
 	resp, err := client.Do(req)
-	fmt.Println("err:", err)
-	dump, _ := httputil.DumpResponse(resp, *dumpBody)
+	if err != nil {
+		log.Fatalln("fetch failed:", err.Error())
+	}
+	dump, _ := httputil.DumpResponse(resp, true)
 	fmt.Println(string(dump))
 }

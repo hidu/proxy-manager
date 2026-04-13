@@ -1,9 +1,0 @@
-[[Users]]
-Name="admin"
-Password="psw"
-PasswordMd5=""
-Admin=true
-
-[[Users]]
-Name="abc"
-Password="abc"

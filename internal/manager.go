@@ -1,130 +1,48 @@
 package internal
 
 import (
-	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
-	"sync"
-	"time"
+	"strings"
 
-	"github.com/fsgo/fsenv"
-	"github.com/fsgo/fsgo/fsfs"
+	"github.com/xanygo/anygo/xattr"
+	"github.com/xanygo/anygo/xhttp"
+	"github.com/xanygo/anygo/xhttp/xhandler"
+	"github.com/xanygo/anygo/xlog"
 )
 
-// ProxyDebug 是否debug
-var ProxyDebug = os.Getenv("ProxyManagerDebug") == "true"
+type Manager struct{}
 
-// ProxyManager manager server
-type ProxyManager struct {
-	startTime  time.Time
-	httpClient *httpClient
-	config     *Config
-	proxyPool  *ProxyPool
-	users      map[string]*User
-	reqNum     int64
-	mux        sync.RWMutex
-}
-
-// NewProxyManager init server
-func NewProxyManager(configPath string) *ProxyManager {
+func NewManager() *Manager {
 	log.Println("starting...")
-	cfg, err := loadConfig(configPath)
-	if err != nil {
-		log.Fatalln("parse Config failed:", err)
-	}
-
-	setEnv(configPath)
-	setupLog(filepath.Join(fsenv.LogDir(), "proxy.log"))
-
-	manager := &ProxyManager{
-		startTime: time.Now(),
-		config:    cfg,
-	}
-	manager.proxyPool = loadPool(cfg)
-
-	manager.loadUsers()
-	SetInterval(func() {
-		manager.loadUsers()
-	}, 300*time.Second)
-
-	manager.httpClient = newHTTPClient(manager)
+	pool = loadPool()
+	manager := &Manager{}
 	return manager
 }
 
-func setEnv(cfp string) {
-	abs, err := filepath.Abs(cfp)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	confDir := filepath.Dir(abs)
-	fsenv.SetConfDir(confDir)
-	rootDir := filepath.Dir(confDir)
-	fsenv.SetRootDir(rootDir)
-}
+func (man *Manager) Start() {
+	listen := xattr.AppMain().MustGetListen("main")
+	log.Println("start proxy manager at:", listen)
 
-func (man *ProxyManager) Start() {
-	addr := fmt.Sprintf("%s:%d", "", man.config.Port)
-	log.Println("start proxy manager at:", addr)
-	err := http.ListenAndServe(addr, man)
+	router := xhttp.NewRouter()
+	router.Use((&xhandler.AccessLog{
+		Logger: xlog.AccessLogger(),
+	}).Next)
+	router.Handle("*", man)
+
+	err := http.ListenAndServe(listen, router)
 	log.Println("proxy server exit:", err)
 }
 
-func (man *ProxyManager) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	host, portInt, err := getHostPortFromReq(req)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("bad request"))
-		log.Println("bad request, err:", err)
+var web = &adminWeb{}
+
+func (man *Manager) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	// bf, _ := httputil.DumpRequest(req, false)
+	// log.Println("ServeHTTP", req.Method, req.RequestURI, "request:\n", string(bf))
+
+	if strings.EqualFold(req.Method, http.MethodConnect) || strings.HasPrefix(req.RequestURI, "http://") {
+		defaultRelay.ServeHTTP(w, req)
 		return
 	}
-
-	isLocalReq := portInt == man.config.Port
-
-	if isLocalReq {
-		isLocalReq = isLocalIP(host)
-	}
-
-	if isLocalReq {
-		man.serveLocalRequest(w, req)
-	} else {
-		man.httpClient.ServeHTTP(w, req)
-	}
-}
-
-func (man *ProxyManager) loadUsers() {
-	users, err := loadUsers(filepath.Join(fsenv.ConfDir(), "users.toml"))
-	if err != nil {
-		log.Println("loadUsers err:", err)
-		return
-	}
-	log.Println("loadUsers success, total:", len(users))
-	man.mux.Lock()
-	man.users = users
-	man.mux.Unlock()
-}
-
-func (man *ProxyManager) getUser(name string) *User {
-	man.mux.RLock()
-	defer man.mux.RUnlock()
-	if len(man.users) == 0 {
-		return nil
-	}
-	return man.users[name]
-}
-
-func setupLog(logPath string) {
-	f := &fsfs.Rotator{
-		Path:    logPath,
-		ExtRule: "1hour",
-	}
-	defer f.Close()
-	if err := f.Init(); err != nil {
-		log.Fatalln("setup logfile failed, path=", logPath, "err=", err)
-	}
-	log.Println("setup logfile with", logPath)
-	mw := io.MultiWriter(os.Stderr, f)
-	log.SetOutput(mw)
+	web.serveAdminPage(w, req)
 }

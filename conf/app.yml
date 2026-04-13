@@ -1,0 +1,29 @@
+Listen:
+  main: "{env.Listen|127.0.0.1:8128}"
+
+SiteTitle: "站点名称"                  # 可选
+SiteNotice: "这个是公告，o(∩∩)o...哈哈"  # 可选
+
+
+# 探活检查的 URL 地址,可选，
+AliveCheckURL: "https://hidu.github.io/hello.md?_t={rand}"
+
+# 检测代理有效的间隔时间,单位秒，可选，默认 300
+CheckInterval: 600
+
+
+# 服务认证方式，可选，默认 “no”
+#options:{no : 无认证, basic:http basic ,basic_any:任意帐号}
+AuthType: "no"
+
+# 使用代理的连接超时时间 单位秒，可选，默认 30
+ProxyTimeout: 6
+
+# 使用代理的默认重试次数，可选，默认 0
+ProxyRetry: 2
+
+# 使用代理时，最大重试次数，可选，默认 0
+# 客户端通过 HTTP Header [X-Man-Retry] 指定 ProxyReTry
+ProxyRetryMax: 10
+
+

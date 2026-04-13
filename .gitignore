@@ -27,3 +27,4 @@ conf/pool_checked.conf
 test
 *.log
 log/
+temp

@@ -6,19 +6,20 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 
-	"github.com/fsgo/fsconf"
+	"github.com/xanygo/anygo/ds/xsync"
+	"github.com/xanygo/anygo/xattr"
+	"github.com/xanygo/anygo/xcfg"
 )
 
 const proxyAuthorizationHeader = "Proxy-Authorization"
 
 type User struct {
-	Name        string
-	Password    string
-	PasswordMd5 string
-	Admin       bool
+	Name        string `yaml:"Name"`
+	Password    string `yaml:"Password"`
+	PasswordMd5 string `yaml:"PasswordMd5"`
+	Admin       bool   `yaml:"Admin"`
 }
 
 func (u *User) pswEq(psw string) bool {
@@ -29,7 +30,7 @@ func (u *User) PswEnc() string {
 	return StrMd5(fmt.Sprintf("%s:%s", u.Name, u.PasswordMd5))
 }
 
-func (u *User) Eq(u1 *User) bool {
+func (u *User) Equal(u1 *User) bool {
 	return u != nil && u.Name == u1.Name && u.PasswordMd5 == u1.PasswordMd5
 }
 
@@ -55,21 +56,32 @@ func getProxyAuthorInfo(req *http.Request) *User {
 	return &User{Name: userPass[0], PasswordMd5: StrMd5(userPass[1])}
 }
 
-const defaultTestUserName = "_test_"
-
-var defaultTestUser = &User{
-	Name:        defaultTestUserName,
-	Password:    strconv.FormatInt(serverStartTime.UnixNano(), 10),
-	PasswordMd5: StrMd5(strconv.FormatInt(serverStartTime.UnixNano(), 10)),
+type userConfig struct {
+	Users []*User `yaml:"Users"`
 }
 
-type userConfig struct {
-	Users []*User
+var usersStore = &xsync.OnceInit[map[string]*User]{
+	New: func() map[string]*User {
+		users, err := loadUsers("users.yml")
+		if err != nil {
+			log.Fatalln("loadUsers err:", err)
+		}
+		log.Println("loadUsers success, total:", len(users))
+		return users
+	},
+}
+
+func getUser(name string) *User {
+	users := usersStore.Load()
+	if len(users) == 0 {
+		return nil
+	}
+	return users[name]
 }
 
 func loadUsers(confPath string) (users map[string]*User, err error) {
 	var uc *userConfig
-	if err = fsconf.Parse(confPath, &uc); err != nil {
+	if err = xcfg.Parse(confPath, &uc); err != nil {
 		return nil, err
 	}
 
@@ -84,7 +96,7 @@ func loadUsers(confPath string) (users map[string]*User, err error) {
 			log.Println("dup name in users:", u.Name)
 			continue
 		}
-		if len(u.PasswordMd5) == 0 {
+		if len(u.PasswordMd5) == 0 && u.Password != "" {
 			u.PasswordMd5 = StrMd5(u.Password)
 		}
 		if len(u.PasswordMd5) == 0 {
@@ -96,17 +108,15 @@ func loadUsers(confPath string) (users map[string]*User, err error) {
 	return users, nil
 }
 
-func (man *ProxyManager) checkHTTPAuth(user *User) bool {
-	switch man.config.AuthType {
+func checkHTTPAuth(user *User) bool {
+	authType := xattr.GetDefault[string]("AuthType", AuthTypeNO)
+	switch authType {
 	case AuthTypeNO:
 		return true
 	case AuthTypeBasic:
-		u := man.getUser(user.Name)
+		u := getUser(user.Name)
 		if u != nil {
-			return u.Eq(user)
-		}
-		if defaultTestUser.Eq(user) {
-			return true
+			return u.Equal(user)
 		}
 		return false
 	case AuthTypeBasicWithAny:
@@ -114,5 +124,15 @@ func (man *ProxyManager) checkHTTPAuth(user *User) bool {
 	default:
 		return false
 	}
-	return false
 }
+
+const (
+	// AuthTypeNO 不需要认证
+	AuthTypeNO = "no"
+
+	// AuthTypeBasic 使用basic
+	AuthTypeBasic = "basic"
+
+	// AuthTypeBasicWithAny 使用 basic，任意账号密码都可以
+	AuthTypeBasicWithAny = "basic_any"
+)
