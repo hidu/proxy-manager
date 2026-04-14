@@ -2,11 +2,11 @@
 <p>{{.notice}}</p>
 <table style="width:100%">
 <tr>
-<td width="360px" valign="top">
+<td style="width: 50%" valign="top">
 <table style="width:100%" class="tb_1">
 <caption><a href="/status" target="_blank">status</a></caption>
 {{ range $index, $kv :=  .Status }}
-    <tr><th width="160px">{{ $kv.Key }}</th> <td>{{ $kv.Value }}</td></tr>
+    <tr><th style="width:30%">{{ $kv.Key }}</th> <td>{{ $kv.Value }}</td></tr>
 {{ end }}
 </table>
 </td>
@@ -95,13 +95,15 @@
         <td nowrap="nowrap">{{ $proxy.Base.Proxy }}</td>
 
         <td class="t_c" nowrap="nowrap">{{ $proxy.State.LastCheck.Load | xDateTime }}</td>
-        <td class="t_c">{{ $status }}</td>
+        <td class="t_c">
+            {{ $status | my_num }}
+        </td>
         <td class="t_c">{{ $proxy.State.LastCheckUsed.Load }}</td>
         <td class="t_c">{{ $proxy.State.LastCheckMsg.Load }}</td>
 
-        <td class="t_c">{{ $proxy.State.UsedTotal.Load }}</td>
-        <td class="t_c">{{ $proxy.State.UsedSuccess.Load }}</td>
-        <td class="t_c">{{ $proxy.State.UsedFailed }}</td>
+        <td class="t_c">{{ $proxy.State.UsedTotal.Load | my_num }}</td>
+        <td class="t_c">{{ $proxy.State.UsedSuccess.Load  | my_num }}</td>
+        <td class="t_c">{{ $proxy.State.UsedFailed | my_num }}</td>
     </tr>
     {{ end }}
     </tbody>

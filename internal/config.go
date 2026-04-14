@@ -11,8 +11,8 @@ import (
 	"github.com/xanygo/anygo/xattr"
 )
 
-func getAliveCheckURL() string {
-	str, _ := xattr.GetAs[string]("AliveCheckURL")
+func getProbeURL() string {
+	str, _ := xattr.GetAs[string]("ProbeURL")
 	if str != "" && strings.Contains(str, "{rand}") {
 		str = strings.ReplaceAll(str, "{rand}", strconv.Itoa(rand.Int()))
 	}

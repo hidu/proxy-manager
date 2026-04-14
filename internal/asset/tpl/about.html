@@ -61,13 +61,16 @@ curl 'http://$name:$psw@{{.proxy_host}}:{{.proxy_port}}/query?url=https://hidu.g
 </pre>
 
  <p class="h6">2.2 /fetch </p>
- <p>Get an available proxy.</p>
- <pre>
- curl 'http://$name:$psw@{{.proxy_host}}:{{.proxy_port}}/fetch'
-</pre>
+ <p>(Logged-in user)Get an available proxy.</p>
 
  <p class="h6">2.2 /clean </p>
- <p>(Admin user) Check and Clea Dyn Proxies.</p>
- <pre>
- curl 'http://{{.proxy_host}}:{{.proxy_port}}/clean'
-</pre>
+ <p>(Admin user) Check (connect success) and Clean invalid Dyn Proxies.</p>
+
+ <p class="h6">2.3 /start_check </p>
+ <p>(Admin user) Start Health checker.</p>
+
+ <p class="h6">2.4 /cancel </p>
+ <p>(Admin user) Stop Health checker.</p>
+
+ <p class="h6">2.5 /status </p>
+ <p>Status information.</p>

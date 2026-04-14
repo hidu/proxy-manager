@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/xanygo/anygo/ds/xcmp"
 	"github.com/xanygo/anygo/ds/xslice"
+	"github.com/xanygo/anygo/ds/xsync"
 	"github.com/xanygo/anygo/ds/xurl"
 	"github.com/xanygo/anygo/xattr"
 	"github.com/xanygo/anygo/xlog"
@@ -51,7 +51,7 @@ var web = &adminWeb{}
 
 type adminWeb struct{}
 
-func (man *adminWeb) serveAdminPage(w http.ResponseWriter, req *http.Request) {
+func (aw *adminWeb) serveAdminPage(w http.ResponseWriter, req *http.Request) {
 	ctx := &webCtx{
 		req:   req,
 		start: time.Now(),
@@ -63,7 +63,7 @@ func (man *adminWeb) serveAdminPage(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	user, isLogin := man.handleCheckLogin(req, ctx)
+	user, isLogin := aw.handleCheckLogin(req, ctx)
 
 	values := make(map[string]any)
 
@@ -99,16 +99,18 @@ func (man *adminWeb) serveAdminPage(w http.ResponseWriter, req *http.Request) {
 
 	funcMap := make(map[string]func(w http.ResponseWriter, req *http.Request, ctx *webCtx))
 
-	funcMap["/"] = man.handleIndex
-	funcMap["/about"] = man.handleAbout
-	funcMap["/add"] = man.handleAdd
-	funcMap["/test"] = man.handleTest
-	funcMap["/login"] = man.handleLogin
-	funcMap["/logout"] = man.handleLogout
-	funcMap["/status"] = man.handleStatus
-	funcMap["/query"] = man.handleQuery
-	funcMap["/fetch"] = man.handleFetch
-	funcMap["/clean"] = man.handeClean
+	funcMap["/"] = aw.handleIndex
+	funcMap["/about"] = aw.handleAbout
+	funcMap["/add"] = aw.handleAdd
+	funcMap["/test"] = aw.handleTest
+	funcMap["/login"] = aw.handleLogin
+	funcMap["/logout"] = aw.handleLogout
+	funcMap["/status"] = aw.handleStatus
+	funcMap["/query"] = aw.handleQuery
+	funcMap["/fetch"] = aw.handleFetch
+	funcMap["/clean"] = aw.handleClean
+	funcMap["/cancel"] = aw.handleCancel
+	funcMap["/start_check"] = aw.handleStartCheck
 
 	if fn, has := funcMap[req.URL.Path]; has {
 		fn(w, req, ctx)
@@ -118,7 +120,6 @@ func (man *adminWeb) serveAdminPage(w http.ResponseWriter, req *http.Request) {
 }
 
 var sortChain = xcmp.Chain[*proxyEntry](
-	xcmp.OrderAsc(func(t *proxyEntry) string { return t.Base.Proxy }),
 	xcmp.OrderAsc(func(t *proxyEntry) int64 {
 		tm := t.State.LastCheck.Load()
 		if tm.IsZero() {
@@ -126,6 +127,7 @@ var sortChain = xcmp.Chain[*proxyEntry](
 		}
 		return tm.UnixNano()
 	}),
+	xcmp.OrderAsc(func(t *proxyEntry) string { return t.Base.Proxy }),
 )
 
 type KV struct {
@@ -133,20 +135,32 @@ type KV struct {
 	Value any
 }
 
-func (man *adminWeb) handleIndex(w http.ResponseWriter, _ *http.Request, ctx *webCtx) {
+func (aw *adminWeb) handleIndex(w http.ResponseWriter, _ *http.Request, ctx *webCtx) {
 	values := ctx.values
 	usedTotal := defaultRelay.usedTotal.Load()
 	usedSuccess := defaultRelay.usedSuccess.Load()
 
-	values["Status"] = []KV{
+	status := []KV{
 		{Key: "Server Start", Value: xattr.StartTime().Format(timeFormatStd)},
-		{Key: "CheckInterval", Value: getCheckInterval().String()},
-		{Key: "Proxy Total", Value: pool.all.Total()},
-		{Key: "Proxy Active", Value: pool.active.Total()},
-		{Key: "Used Total", Value: usedTotal},
-		{Key: "Used Success", Value: usedSuccess},
-		{Key: "Used Fail", Value: usedTotal - usedSuccess},
+		{Key: "Check Interval", Value: getCheckInterval().String()},
+
+		{Key: "Proxies Total", Value: pool.all.Total()},
+		{Key: "Proxies Active", Value: pool.active.Total()},
+
+		{Key: "Usage Total", Value: usedTotal},
+		{Key: "Usage Success", Value: usedSuccess},
+		{Key: "Usage Fail", Value: usedTotal - usedSuccess},
+
+		{Key: "Checker Probe URL", Value: getProbeURL()},
+		{Key: "Checker Producer Running", Value: producerRunning.Load()},
+		{Key: "Checker Last Check", Value: lastChecked.Load()},
 	}
+
+	if ct := silentDeadline.Load(); ct.After(time.Now()) {
+		status = append(status, KV{Key: "Checker Silent Deadline", Value: ct.String()})
+	}
+
+	values["Status"] = status
 
 	active := pool.active.All()
 	slices.SortFunc(active, sortChain)
@@ -163,7 +177,7 @@ func (man *adminWeb) handleIndex(w http.ResponseWriter, _ *http.Request, ctx *we
 }
 
 // handleAdd 添加新代理地址
-func (man *adminWeb) handleAdd(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
+func (aw *adminWeb) handleAdd(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
 	values := ctx.values
 	doPost := func() {
 		if !ctx.isAdmin() {
@@ -211,13 +225,13 @@ func (man *adminWeb) handleAdd(w http.ResponseWriter, req *http.Request, ctx *we
 	http.NotFound(w, req)
 }
 
-func (man *adminWeb) handleAbout(w http.ResponseWriter, _ *http.Request, ctx *webCtx) {
+func (aw *adminWeb) handleAbout(w http.ResponseWriter, _ *http.Request, ctx *webCtx) {
 	values := ctx.values
 	code := renderHTML("about.html", values, true)
 	_, _ = w.Write(code)
 }
 
-func (man *adminWeb) handleLogout(w http.ResponseWriter, req *http.Request, _ *webCtx) {
+func (aw *adminWeb) handleLogout(w http.ResponseWriter, req *http.Request, _ *webCtx) {
 	cookie := &http.Cookie{Name: cookieName, Value: "", Path: "/"}
 	http.SetCookie(w, cookie)
 	if _, _, ok := req.BasicAuth(); ok {
@@ -228,21 +242,27 @@ func (man *adminWeb) handleLogout(w http.ResponseWriter, req *http.Request, _ *w
 	http.Redirect(w, req, "/", http.StatusFound)
 }
 
-func (man *adminWeb) handleStatus(w http.ResponseWriter, _ *http.Request, _ *webCtx) {
+func (aw *adminWeb) handleStatus(w http.ResponseWriter, _ *http.Request, _ *webCtx) {
+	usedTotal := defaultRelay.usedTotal.Load()
+	usedSuccess := defaultRelay.usedSuccess.Load()
 	values := map[string]any{
 		"StartTime": xattr.StartTime().Format(timeFormatStd),
 		"Version":   version,
-		"Request": map[string]any{
-			"Total":   defaultRelay.usedTotal.Load(),
-			"Success": defaultRelay.usedSuccess.Load(),
-		},
 		"Checker": map[string]any{
-			"CheckURL": getAliveCheckURL(),
-			"Interval": getCheckInterval().String(),
-			"Jobs":     len(pool.checkerJobs),
+			"ProbeURL":     getProbeURL(),
+			"Interval":     getCheckInterval().String(),
+			"BufferedJobs": len(pool.checkerJobs),
+		},
+		"Counter": map[string]any{
+			"ActiveProxies": pool.active.Total(),
+			"TotalProxies":  pool.all.Total(),
+			"DynProxies":    pool.dyn.Total(),
+
+			"UsageTotal":   usedTotal,
+			"UsageSuccess": usedSuccess,
+			"UsageFail":    usedTotal - usedSuccess,
 		},
 		"Timeout":      getProxyTimeout().String(),
-		"ProxyDetail":  pool.GetProxyNumbers(),
 		"NumGoroutine": runtime.NumGoroutine(),
 	}
 
@@ -256,7 +276,7 @@ func init() {
 }
 
 // handleTest  测试一个代理是否可以正常使用
-func (man *adminWeb) handleTest(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
+func (aw *adminWeb) handleTest(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
 	values := ctx.values
 	doPost := func() {
 		token := req.PostFormValue("token")
@@ -315,7 +335,7 @@ func (man *adminWeb) handleTest(w http.ResponseWriter, req *http.Request, ctx *w
 
 	switch req.Method {
 	case "GET":
-		values["checkURL"] = getAliveCheckURL()
+		values["checkURL"] = getProbeURL()
 		values["token"] = staticToken
 
 		code := renderHTML("test.html", values, true)
@@ -328,7 +348,7 @@ func (man *adminWeb) handleTest(w http.ResponseWriter, req *http.Request, ctx *w
 	http.NotFound(w, req)
 }
 
-func (man *adminWeb) handleLogin(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
+func (aw *adminWeb) handleLogin(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
 	values := ctx.values
 	if req.Method == "POST" {
 		name := req.PostFormValue("name")
@@ -354,7 +374,7 @@ func (man *adminWeb) handleLogin(w http.ResponseWriter, req *http.Request, ctx *
 	}
 }
 
-func (man *adminWeb) handleCheckLogin(req *http.Request, ctx *webCtx) (user *User, isLogin bool) {
+func (aw *adminWeb) handleCheckLogin(req *http.Request, ctx *webCtx) (user *User, isLogin bool) {
 	if req == nil {
 		return nil, false
 	}
@@ -392,20 +412,7 @@ func (man *adminWeb) handleCheckLogin(req *http.Request, ctx *webCtx) (user *Use
 	return nil, false
 }
 
-func renderHTML(fileName string, values map[string]any, layout bool) []byte {
-	w := &bytes.Buffer{}
-	err := tpl.ExecuteTemplate(w, fileName, values)
-	if err != nil {
-		w.WriteString("reader error:" + err.Error())
-	}
-	if !layout {
-		return w.Bytes()
-	}
-	values["body"] = w.String()
-	return renderHTML("layout.html", values, false)
-}
-
-func (man *adminWeb) handleQuery(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
+func (aw *adminWeb) handleQuery(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
 	if !ctx.isLogin {
 		notLoginHandler(w, req)
 		return
@@ -441,7 +448,7 @@ func (man *adminWeb) handleQuery(w http.ResponseWriter, req *http.Request, ctx *
 }
 
 // handleFetch 获取一个代理服务器
-func (man *adminWeb) handleFetch(w http.ResponseWriter, _ *http.Request, ctx *webCtx) {
+func (aw *adminWeb) handleFetch(w http.ResponseWriter, _ *http.Request, ctx *webCtx) {
 	if !ctx.isLogin {
 		data := map[string]any{
 			"Code": 1,
@@ -469,7 +476,7 @@ func (man *adminWeb) handleFetch(w http.ResponseWriter, _ *http.Request, ctx *we
 	writeJSON(w, http.StatusOK, data)
 }
 
-func (man *adminWeb) handeClean(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
+func (aw *adminWeb) handleClean(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
 	if !ctx.isAdmin() {
 		notLoginHandler(w, req)
 		return
@@ -478,6 +485,27 @@ func (man *adminWeb) handeClean(w http.ResponseWriter, req *http.Request, ctx *w
 	timeout := xurl.IntDef(req.URL.Query(), "timeout", 0)
 	ret := pool.DynClean(limit, timeout)
 	writeJSON(w, http.StatusOK, ret)
+}
+
+var silentDeadline xsync.TimeStamp
+
+func (aw *adminWeb) handleCancel(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
+	if !ctx.isAdmin() {
+		notLoginHandler(w, req)
+		return
+	}
+	minute := xurl.IntDef(req.URL.Query(), "minute", 2)
+	silentDeadline.Store(time.Now().Add(time.Duration(minute) * time.Minute))
+	w.Write([]byte("Ok"))
+}
+
+func (aw *adminWeb) handleStartCheck(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
+	if !ctx.isAdmin() {
+		notLoginHandler(w, req)
+		return
+	}
+	go pool.startCheckProducer()
+	w.Write([]byte("Ok"))
 }
 
 func notLoginHandler(w http.ResponseWriter, _ *http.Request) {

@@ -13,7 +13,7 @@ html,body{margin: 0;padding: 0}
   color:white;
 }
 #menu{
-    width: 80%;
+    width: 90%;
     margin: 0 auto;
     padding: 10px 0 10px 0
  }
@@ -95,7 +95,7 @@ table {border-collapse: collapse;border-spacing: 0;}
 td.td_has_sub{padding: 0 !important;}
 td.td_has_sub .tb_1{margin: 0;border: 0;}
 
-#bd0{margin:0 auto;width:80%}
+#bd0{margin:0 auto;width:90%}
 .form-control{height: 26px;padding:0}
 fieldset {
 	border-radius:10px;

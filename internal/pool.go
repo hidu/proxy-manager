@@ -45,7 +45,7 @@ var pool *ProxyPool
 // loadPool 从配置文件中加载代理池
 func loadPool() *ProxyPool {
 	p := &ProxyPool{
-		checkerJobs: make(chan *proxyEntry, 1024),
+		checkerJobs: make(chan *proxyEntry, 8),
 		all:         newProxyList(nil),
 		active:      newProxyList(nil),
 		primary:     newProxyList(nil),
@@ -66,13 +66,18 @@ func loadPool() *ProxyPool {
 
 // loadProxies 加载所有配置文件
 func (p *ProxyPool) loadProxies() {
-	pl, err := p.parserConfigFile("proxies") // 加载 conf/proxies.yml 陪
-	if err != nil {
-		log.Printf("load conf/proxies failed: %v, ignored\n", err)
+	// load conf/proxies.yml
+	{
+		pl, err := p.parserConfigFile("proxies")
+		if err != nil {
+			log.Printf("load conf/proxies failed: %v, ignored\n", err)
+		}
+		log.Printf("found %d proxies in conf/proxies\n", pl.Total())
+		pl.MergeTo(p.primary)
+		pl.MergeTo(p.all)
 	}
-	log.Printf("found %d proxies in conf/proxies\n", pl.Total())
-	pl.MergeTo(p.primary)
-	pl.MergeTo(p.all)
+
+	// load conf/dyn.yml
 	{
 		temp, err := p.parserConfigFile(dynCfgName)
 		if err == nil && temp != nil {
@@ -110,7 +115,7 @@ var producerRunning atomic.Bool
 
 func (p *ProxyPool) startCheckProducer() {
 	if !producerRunning.CompareAndSwap(false, true) {
-		xlog.Warn(context.Background(), "CheckProducer already running, skipped this")
+		xlog.Warn(context.Background(), "CheckProducer already running, skipped")
 		return
 	}
 	defer producerRunning.Store(false)
@@ -120,13 +125,20 @@ func (p *ProxyPool) startCheckProducer() {
 
 	xlog.Info(context.Background(), "CheckProducer starting...", xlog.Int("TotalJobs", len(items)))
 
+	var isCanceled bool
+
 	for _, one := range items {
+		if time.Now().Before(silentDeadline.Load()) {
+			isCanceled = true
+			break
+		}
 		p.checkerJobs <- one
 	}
 	cost := time.Since(start)
 	xlog.Info(context.Background(), "CheckProducer done",
 		xlog.Int("TotalJobs", len(items)),
 		xlog.DurationMS("Cost", cost),
+		xlog.Bool("IsCanceled", isCanceled),
 		xlog.Time("Start", start),
 	)
 }
@@ -166,14 +178,15 @@ func (p *ProxyPool) trySaveToFile() {
 }
 
 // testProxyAddActive 测试一个代理是否可用 若可用则加入代理池否则删除
-func (p *ProxyPool) testProxyAddActive(one *proxyEntry) bool {
+func (p *ProxyPool) testProxyAddActive(one *proxyEntry) {
 	if p.checkProxyEntry(one) {
 		p.active.Add(one)
 	} else {
 		p.active.Remove(one)
 	}
-	return true
 }
+
+var lastChecked xsync.Value[string]
 
 func (p *ProxyPool) checkProxyEntry(proxy *proxyEntry) bool {
 	if p.all.Get(proxy.Base.Proxy) == nil {
@@ -186,7 +199,7 @@ func (p *ProxyPool) checkProxyEntry(proxy *proxyEntry) bool {
 
 	xlog.AddAttr(ctx, xlog.String("Proxy", proxy.Base.Proxy))
 
-	checkURL := getAliveCheckURL()
+	checkURL := getProbeURL()
 	resp, err := httpGetByProxyEntry(ctx, checkURL, proxy)
 	{
 		cost := time.Since(start)
@@ -197,6 +210,8 @@ func (p *ProxyPool) checkProxyEntry(proxy *proxyEntry) bool {
 		proxy.State.LastCheckStatus.Store(int64(255))
 		proxy.State.LastCheckMsg.Store(err.Error())
 		xlog.Warn(ctx, "checkProxy failed", xlog.ErrorAttr("error", err))
+
+		lastChecked.Store(fmt.Sprintf("%s: %s >err: %s", time.Now().String(), proxy.Base.URL.Hostname(), err.Error()))
 
 		if pool.dyn.Remove(proxy) {
 			pool.all.Remove(proxy)
@@ -209,7 +224,10 @@ func (p *ProxyPool) checkProxyEntry(proxy *proxyEntry) bool {
 	proxy.State.LastCheckStatus.Store(int64(resp.StatusCode))
 	proxy.State.LastCheckMsg.Store("")
 
-	if resp.StatusCode == http.StatusOK {
+	lastChecked.Store(fmt.Sprintf("%s: %s >status: %s", time.Now().String(), proxy.Base.URL.Hostname(), resp.Status))
+
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusNoContent:
 		proxy.State.LastCheckOk.Store(start)
 		xlog.Info(ctx, "checkProxy success")
 		return true
@@ -217,29 +235,6 @@ func (p *ProxyPool) checkProxyEntry(proxy *proxyEntry) bool {
 
 	xlog.Warn(ctx, "checkProxy failed", xlog.Int("StatusCode", resp.StatusCode))
 	return false
-}
-
-// GetProxyNumbers 返回各种代理的数量 web页面会使用
-func (p *ProxyPool) GetProxyNumbers() map[string]int {
-	data := make(map[string]int, 10)
-	data["total"] = p.all.Total()
-	data["active"] = p.active.Total()
-
-	p.active.Range(func(proxyURL string, proxy *proxyEntry) bool {
-		name := fmt.Sprintf("active_%s", proxy.Base.URL.Scheme)
-		data[name]++
-		return true
-	})
-	return data
-}
-
-func (p *ProxyPool) ActiveList() map[string]*proxyEntry {
-	proxies := make(map[string]*proxyEntry)
-	p.active.Range(func(proxyURL string, proxy *proxyEntry) bool {
-		proxies[proxyURL] = proxy
-		return true
-	})
-	return proxies
 }
 
 var dynCleanRunning atomic.Bool
@@ -304,6 +299,9 @@ func (p *ProxyPool) DynClean(limit int, timeout int) any {
 
 	itemsChunk := xslice.Chunk(p.dyn.All(), 16)
 	for _, pps := range itemsChunk {
+		if time.Now().Before(silentDeadline.Load()) {
+			break
+		}
 		check(pps)
 		if limit > 0 && checked.Load() >= int32(limit) {
 			break

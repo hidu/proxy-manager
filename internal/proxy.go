@@ -82,6 +82,11 @@ func (ps *proxyState) UsedFailed() int64 {
 	return ps.UsedTotal.Load() - ps.UsedSuccess.Load()
 }
 
+func (ps *proxyState) IsStatusOk() bool {
+	v := ps.LastCheckStatus.Load()
+	return v == http.StatusOK || v == http.StatusNoContent
+}
+
 func newProxy(proxyURL string) *proxyEntry {
 	base := &proxyBase{Proxy: proxyURL}
 	var err error
@@ -108,7 +113,7 @@ func (p *proxyEntry) String() string {
 
 // IsOk 是否可用状态
 func (p *proxyEntry) IsOk() bool {
-	return p.State.LastCheckStatus.Load() == http.StatusOK
+	return p.State.IsStatusOk()
 }
 
 func (p *proxyEntry) GetUsedTotal() int64 {

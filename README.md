@@ -1,4 +1,15 @@
-proxy-manager
+# proxy-manager
+
+[中文](https://github.com/hidu/proxy-manager)   |
+[Deutsch](https://zdoc.app/de/hidu/proxy-manager) |
+[English](https://zdoc.app/en/hidu/proxy-manager) |
+[Español](https://zdoc.app/es/hidu/proxy-manager) |
+[français](https://zdoc.app/fr/hidu/proxy-manager) |
+[日本語](https://zdoc.app/ja/hidu/proxy-manager) |
+[한국어](https://zdoc.app/ko/hidu/proxy-manager) |
+[Português](https://zdoc.app/pt/hidu/proxy-manager) |
+[Русский](https://zdoc.app/ru/hidu/proxy-manager) 
+
 
 ## 概述
 1.  统一管理 http、https、socks4、socks4a、socks5、shadowsocks 代理
@@ -70,12 +81,11 @@ curl 'http://$name:$psw@127.0.0.1:8128/query?method=POST&url=https://hidu.github
 
 
 #### /add: 添加代理
-```
-curl 命令示例：
+```bash
 curl --data "user_name=admin&psw_md5=7bb483729b5a8e26f73e1831cde5b842&proxy=http://10.0.1.9:3128" http://127.0.0.1:8128/add
 ```
 
 #### /status: 服务状态接口
-```
+```bash
 curl http://127.0.0.1:8128/status
 ```
