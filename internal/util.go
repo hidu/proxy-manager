@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/xanygo/anygo/safely"
 )
 
 func getHostPortFromReq(req *http.Request) (host string, port int, err error) {
@@ -58,7 +60,7 @@ func SetInterval(call func(), dur time.Duration) *time.Ticker {
 	ticker := time.NewTicker(dur)
 	go func() {
 		for range ticker.C {
-			call()
+			safely.Run(call)
 		}
 	}()
 	return ticker

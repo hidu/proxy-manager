@@ -5,21 +5,9 @@
 <td width="360px" valign="top">
 <table style="width:100%" class="tb_1">
 <caption><a href="/status" target="_blank">status</a></caption>
-  <tr><th width="160px">Server Start</th> <td>{{ .startTime }}</td></tr>
-  <tr><th>Alive CheckInterval</th> <td>{{.AliveCheckInterval }}</td></tr>
-  <tr><th>Proxy Total </th> <td>{{ index .proxy_count "total" }}</td></tr>
-  <tr><th>Proxy Active </th> <td>{{ index .proxy_count "active" }} </td></tr>
-  <tr><th>HTTP Active</th> <td>{{ index .proxy_count "active_http" }}</td></tr>
-  <tr><th>HTTPS Active</th> <td>{{ index .proxy_count "active_https" }}</td></tr>
-  <tr><th>Socks5 Active</th> <td>{{ index .proxy_count "active_socks5" }}</td></tr>
-  <tr><th>Socks4 Active</th> <td>{{ index .proxy_count "active_socks4" }}</td></tr>
-  <tr><th>Socks4a Active</th> <td>{{ index .proxy_count "active_socks4a" }}</td></tr>
-  <tr><th>ss Active</th> <td>{{ index .proxy_count "active_ss" }}</td></tr>
-
-  <tr><th>Request Total</th> <td>{{.proxyCntUsedTotal}}</td></tr>
-  <tr><th>Request Success</th> <td>{{.proxyCntUsedSuc}}</td></tr>
-  <tr><th>Request Failed</th> <td>{{.proxyCntUsedFail}}</td></tr>
-  
+{{ range $index, $kv :=  .Status }}
+    <tr><th width="160px">{{ $kv.Key }}</th> <td>{{ $kv.Value }}</td></tr>
+{{ end }}
 </table>
 </td>
 <td width="20px"></td>
@@ -68,50 +56,54 @@
 </table>
 
 {{if .isAdmin}}
+<div>
+    <h5>Active Proxies</h5>
+    {{ template "index/proxies_table" .active }}
+</div>
 
-<table class="tb_1" style="margin-top: 30px">
-    <caption>All Proxies</caption>
-<thead>
-  <tr>
-      <th rowspan="2" style="width: 70px">No.</th>
-      <th rowspan="2" style="width: 200px">Address</th>
-      <th colspan="4" style="width: 60%">Health Check</th>
-      <th colspan="3" style="width: 180px">Usage Statistics</th>
-  </tr>
-<tr>
-    <th >Time</th>
-    <th style="width: 80px">Status Code</th>
-    <th title="ms" style="width: 100px">Delay</th>
-    <th>Message</th>
-
-    <th nowrap="nowrap">Used</th>
-    <th nowrap="nowrap">Success</th>
-    <th nowrap="nowrap">Fail</th>
-</tr>
-</thead>
-<tbody>
-	{{ range $index,$proxy:=.proxies }}
-    {{ $status:= $proxy.State.LastCheckStatus.Load }}
-	 <tr
-             {{ if eq $status 200 }}
-             style="background: #58d68d;color:blue"
-             {{ else }}
-             style="color:#c7254e"
-             {{ end -}}
-     >
-         <td class="t_c" nowrap="nowrap">{{ $index }}</td>
-         <td nowrap="nowrap">{{ $proxy.Base.Proxy }}</td>
-
-         <td class="t_c" nowrap="nowrap">{{ $proxy.State.LastCheck.Load|myTime }}</td>
-         <td class="t_c">{{ $status }}</td>
-         <td class="t_c">{{ $proxy.State.LastCheckUsed.Load|myDur }}</td>
-         <td class="t_c">{{ $proxy.State.LastCheckMsg.Load }}</td>
-
-         <td class="t_c">{{ $proxy.State.UsedTotal.Load }}</td>
-         <td class="t_c">{{ $proxy.State.UsedSuccess.Load }}</td>
-         <td class="t_c">{{ $proxy.State.UsedFailed }}</td>
-	 </tr>
-	{{ end }}
-</tbody>
-</table>
+<div>
+    <h5>Not Active Proxies</h5>
+    {{ template "index/proxies_table" .other }}
+</div>
 {{end}}
+
+{{ define "index/proxies_table" }}
+<table class="tb_1">
+    <thead>
+    <tr>
+        <th rowspan="2" style="width: 70px">No.</th>
+        <th rowspan="2" style="width: 200px">Address</th>
+        <th colspan="4" style="width: 60%">Health Check</th>
+        <th colspan="3" style="width: 180px">Usage Statistics</th>
+    </tr>
+    <tr>
+        <th >Time</th>
+        <th style="width: 80px">Status Code</th>
+        <th title="ms" style="width: 100px">Delay</th>
+        <th>Message</th>
+
+        <th nowrap="nowrap">Used</th>
+        <th nowrap="nowrap">Success</th>
+        <th nowrap="nowrap">Fail</th>
+    </tr>
+    </thead>
+    <tbody>
+    {{ range $index,$proxy:=. }}
+    {{ $status:= $proxy.State.LastCheckStatus.Load }}
+    <tr>
+        <td class="t_c" nowrap="nowrap">{{ xMathAdd $index 1 }}</td>
+        <td nowrap="nowrap">{{ $proxy.Base.Proxy }}</td>
+
+        <td class="t_c" nowrap="nowrap">{{ $proxy.State.LastCheck.Load | xDateTime }}</td>
+        <td class="t_c">{{ $status }}</td>
+        <td class="t_c">{{ $proxy.State.LastCheckUsed.Load }}</td>
+        <td class="t_c">{{ $proxy.State.LastCheckMsg.Load }}</td>
+
+        <td class="t_c">{{ $proxy.State.UsedTotal.Load }}</td>
+        <td class="t_c">{{ $proxy.State.UsedSuccess.Load }}</td>
+        <td class="t_c">{{ $proxy.State.UsedFailed }}</td>
+    </tr>
+    {{ end }}
+    </tbody>
+</table>
+{{ end }}

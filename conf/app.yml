@@ -5,6 +5,8 @@ Listen:
 
 # 以下配置内容均为可选
 
+LogStore:  "{env.LogStore|stderr}" # 日志输出，可选值: file - 输出到 log 目录的文件；stderr -输出到 stderr ；no - 不输出
+
 SiteTitle: "站点名称"                  # 可选
 SiteNotice: "这个是公告，o(∩∩)o...哈哈"  # 可选
 

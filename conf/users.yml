@@ -1,4 +1,4 @@
-# 用户列表
+# 用户列表,必须
 Users:
   - Name: "admin"    # 用户名，必填
     Password: "psw"  # 密码，Password 和 PasswordMd5 二者至少填写一个

@@ -11,16 +11,8 @@ import (
 	"github.com/xanygo/anygo/xlog"
 )
 
-type Manager struct{}
-
-func NewManager() *Manager {
+func Start() {
 	log.Println("starting...")
-	pool = loadPool()
-	manager := &Manager{}
-	return manager
-}
-
-func (man *Manager) Start() {
 	listen := xattr.AppMain().MustGetListen("main")
 	log.Println("start proxy manager at:", listen)
 
@@ -28,15 +20,16 @@ func (man *Manager) Start() {
 	router.Use((&xhandler.AccessLog{
 		Logger: xlog.AccessLogger(),
 	}).Next)
-	router.Handle("*", man)
+
+	router.Handle("*", &gateway{})
 
 	err := http.ListenAndServe(listen, router)
 	log.Println("proxy server exit:", err)
 }
 
-var web = &adminWeb{}
+type gateway struct{}
 
-func (man *Manager) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+func (gw *gateway) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	// bf, _ := httputil.DumpRequest(req, false)
 	// log.Println("ServeHTTP", req.Method, req.RequestURI, "request:\n", string(bf))
 

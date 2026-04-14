@@ -117,12 +117,16 @@ func (p *proxyEntry) GetUsedTotal() int64 {
 
 var zd net.Dialer
 
-func (p *proxyEntry) TestByDial(ctx context.Context) error {
+func (p *proxyEntry) TestByDial(ctx context.Context, timeoutSeconds int) error {
 	host, port, err := getHostPortFromURL(p.Base.Proxy)
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	timeout := time.Duration(timeoutSeconds) * time.Second
+	if timeout <= 0 {
+		timeout = getProxyTimeout()
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	conn, err := zd.DialContext(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
@@ -146,9 +150,10 @@ func newProxyList(items []*proxyBase) *ProxyList {
 }
 
 type ProxyList struct {
-	all    *xslice.Sync[*proxyEntry]
-	list   *xmap.Sync[string, *proxyEntry]
-	nextID int64
+	all     *xslice.Sync[*proxyEntry]
+	list    *xmap.Sync[string, *proxyEntry]
+	nextID  atomic.Int64
+	changed xsync.TimeStamp // 保存首次修改后的时间
 }
 
 func (pl *ProxyList) Range(fn func(proxyURL string, proxy *proxyEntry) bool) {
@@ -159,8 +164,17 @@ func (pl *ProxyList) Add(p *proxyEntry) bool {
 	_, loaded := pl.list.LoadOrStore(p.Base.Proxy, p)
 	if !loaded {
 		pl.updateAll()
+		pl.saveChanged()
 	}
 	return !loaded
+}
+
+func (pl *ProxyList) saveChanged() {
+	pl.changed.CompareAndSwap(time.Time{}, time.Now())
+}
+
+func (pl *ProxyList) ResetChanged() {
+	pl.changed.Store(time.Time{})
 }
 
 func (pl *ProxyList) updateAll() {
@@ -180,6 +194,7 @@ func (pl *ProxyList) RemoveByKey(key string) bool {
 	_, loaded := pl.list.LoadAndDelete(key)
 	if loaded {
 		pl.updateAll()
+		pl.saveChanged()
 	}
 	return loaded
 }
@@ -208,7 +223,7 @@ func (pl *ProxyList) Next() *proxyEntry {
 	if len(allProxy) == 0 {
 		return nil
 	}
-	nextID := atomic.AddInt64(&pl.nextID, 1)
+	nextID := pl.nextID.Add(1)
 	index := int(nextID) % len(allProxy)
 	return allProxy[index]
 }

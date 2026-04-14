@@ -26,6 +26,6 @@ func init() {
 func main() {
 	flag.Parse()
 	xattr.MustInitAppMain(*c, xcfg.Parse)
-	manager := internal.NewManager()
-	manager.Start()
+	internal.Setup()
+	internal.Start()
 }
