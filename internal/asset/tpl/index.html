@@ -1,68 +1,69 @@
 <br/>
 <p>{{.notice}}</p>
-<table style="width:100%">
-<tr>
-<td style="width: 50%" valign="top">
-<table style="width:100%" class="tb_1">
-<caption><a href="/status" target="_blank">status</a></caption>
-{{ range $index, $kv :=  .Status }}
-    <tr><th style="width:30%">{{ $kv.Key }}</th> <td>{{ $kv.Value }}</td></tr>
-{{ end }}
-</table>
-</td>
-<td width="20px"></td>
-<td valign="top">
-<div>
 
+<div class="row">
+    <div class="col-md-6">
+        {{ template "index/status" . }}
+    </div>
+    <div class="col-md-6">
+        {{ template "index/arch" }}
+    </div>
+</div>
+
+{{ define "index/status" }}
+<table style="width:100%" class="tb_1">
+    <caption><a href="/status" target="_blank">status</a></caption>
+    {{ range $index, $kv :=  .Status }}
+    <tr><th style="width:30%">{{ $kv.Key }}</th> <td>{{ $kv.Value }}</td></tr>
+    {{ end }}
+</table>
+{{ end }}
+
+{{ define "index/arch" }}
 <table  class="tb_1">
     <caption> Architecture ( <a href="/about">usage</a> )</caption>
     <tbody>
-        <tr>
-            <td rowspan="2"  class="t_c">Client</td>
-            <td  colspan="2" class="t_c b_y">Proxy Manager</td>
-            <td rowspan="2"  class="t_c">Target Server</td>
-        </tr>
-        <tr>
-            <td class="t_c">HTTP Proxy Server</td>
-            <td class="t_c"> Proxy Pool</td>
-        </tr>
-		<tr>
-			<td rowspan="3" class="t_c">
-                Your Application <br/>
-                <p style="margin-top: 10px;color:gray;font-size: 13px">
-                    (Using Proxy: http://{{.proxy_host}}:{{.proxy_port}})
-                </p>
-            </td>
-			<td rowspan="3" class="t_c">
-                <div>Listen On</div>
-                <p>http://{{.proxy_host}}:{{.proxy_port}}</p>
-            </td>
-			<td nowrap="nowrap">http://xxx.xxx:3128</td>
-			<td rowspan="3" class="t_c">http(s)://www.example.com</td>
-		</tr>
-		<tr>
-			<td nowrap="nowrap">socks5://xxx.xxx:1080</td>
-		</tr>
-		<tr>
-			<td nowrap="nowrap">socks4://xxx.xxx:4567</td>
-		</tr>
-	</tbody>
+    <tr>
+        <td rowspan="2"  class="t_c">Client</td>
+        <td  colspan="2" class="t_c b_y">Proxy Manager</td>
+        <td rowspan="2"  class="t_c">Target Server</td>
+    </tr>
+    <tr>
+        <td class="t_c">HTTP Proxy Server</td>
+        <td class="t_c"> Proxy Pool</td>
+    </tr>
+    <tr>
+        <td rowspan="3" class="t_c">
+            Your Application <br/>
+            <p style="margin-top: 10px;color:gray;font-size: 13px">
+                (Using Proxy: http://{{.proxy_host}}:{{.proxy_port}})
+            </p>
+        </td>
+        <td rowspan="3" class="t_c">
+            <div>Listen On</div>
+            <p>http://{{.proxy_host}}:{{.proxy_port}}</p>
+        </td>
+        <td nowrap="nowrap">http://xxx.xxx:3128</td>
+        <td rowspan="3" class="t_c">http(s)://www.example.com</td>
+    </tr>
+    <tr>
+        <td nowrap="nowrap">socks5://xxx.xxx:1080</td>
+    </tr>
+    <tr>
+        <td nowrap="nowrap">socks4://xxx.xxx:4567</td>
+    </tr>
+    </tbody>
 </table>
-
-
-</div>
-</td>
-</tr>
-</table>
+{{ end }}
 
 {{if .isAdmin}}
-<div>
-    <h5>Active Proxies</h5>
+<div class="mt-5">
+    <h5 class="text-success">Active Proxies</h5>
     {{ template "index/proxies_table" .active }}
 </div>
 
-<div>
-    <h5>Inactive Proxies</h5>
+<div class="mt-3">
+    <h5 class="text-warning">Inactive Proxies</h5>
     {{ template "index/proxies_table" .other }}
 </div>
 {{end}}

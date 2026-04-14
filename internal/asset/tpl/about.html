@@ -1,76 +1,78 @@
  <br/>
-<p class="h3">about</p>
- <p>Proxy manager.</p>
- <p>Support <font color=blue>http、https、socks4、socks4a、socks5、shadowsocks</font> proxy.</p>
- <p>Project : <a href="https://github.com/hidu/proxy-manager" target="_blank">https://github.com/hidu/proxy-manager</a></p>
- <p>Current Version: <font color=blue>{{.version}}</font></p> 
- <br/>
+ <div class="container">
+    <p class="h3">about</p>
+     <p>Proxy manager.</p>
+     <p>Support <font color=blue>http、https、socks4、socks4a、socks5、shadowsocks</font> proxy.</p>
+     <p>Project : <a href="https://github.com/hidu/proxy-manager" target="_blank">https://github.com/hidu/proxy-manager</a></p>
+     <p>Current Version: <font color=blue>{{.version}}</font></p>
+     <br/>
 
-<br/>
-<p class="h4">Usage:</p>
- 
-<p class="h5">1. As HTTP/HTTPS Proxy Server</p>
- <code><pre><span style="color: #2a7aaf;font-size: 16px">PHP:</span>
-ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, "https://hidu.github.io/hello.md"); 
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, <b>CURLOPT_PROXY</b>,"<font color=blue>{{.proxy_host}}:{{.proxy_port}}</font>");
-curl_setopt($ch, <b>CURLOPT_PROXYUSERPWD</b>,"<font color=blue>$name:$psw</font>"); // if necessary
-$body=curl_exec($ch); 
-curl_close($ch);
-</pre></code>
+    <br/>
+    <p class="h4">Usage:</p>
 
- <code><pre><span style="color: #2a7aaf;font-size: 16px">Go HTTP.Client:</span>
-proxyURL, err := url.Parse("http://$name:$psw@{{.proxy_host}}:{{.proxy_port}}")
-if err != nil {
-    log.Fatalf("parser proxy %q: %v\n", *proxy, err)
-}
-client := &http.Client{
-    Timeout: 10 * time.Second,
-    Transport: &http.Transport{
-        Proxy: func(req *http.Request) (*url.URL, error) {
-            log.Println("using proxy", proxyURL.String())
-            return proxyURL, nil
+    <p class="h5">1. As HTTP/HTTPS Proxy Server</p>
+     <code><pre><span style="color: #2a7aaf;font-size: 16px">PHP:</span>
+    ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, "https://hidu.github.io/hello.md");
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, <b>CURLOPT_PROXY</b>,"<font color=blue>{{.proxy_host}}:{{.proxy_port}}</font>");
+    curl_setopt($ch, <b>CURLOPT_PROXYUSERPWD</b>,"<font color=blue>$name:$psw</font>"); // if necessary
+    $body=curl_exec($ch);
+    curl_close($ch);
+    </pre></code>
+
+     <code><pre><span style="color: #2a7aaf;font-size: 16px">Go HTTP.Client:</span>
+    proxyURL, err := url.Parse("http://$name:$psw@{{.proxy_host}}:{{.proxy_port}}")
+    if err != nil {
+        log.Fatalf("parser proxy %q: %v\n", *proxy, err)
+    }
+    client := &http.Client{
+        Timeout: 10 * time.Second,
+        Transport: &http.Transport{
+            Proxy: func(req *http.Request) (*url.URL, error) {
+                log.Println("using proxy", proxyURL.String())
+                return proxyURL, nil
+            },
         },
-    },
-}
-</pre></code>
+    }
+    </pre></code>
 
- <code><pre><span style="color: #2a7aaf;font-size: 16px">Bash CURL:</span>
-curl -x http://$name:$psw@{{.proxy_host}}:{{.proxy_port}} 'https://hidu.github.io/hello.md'
-</pre></code>
- 
-<p class="h5">2. API </p>
- <p class="h6">2.1 /query </p>
- <p>Handle it as a normal web service and proxy the request.</p>
-<code>
- curl 'http://$name:$psw@{{.proxy_host}}:{{.proxy_port}}/query?
- <kbd>url</kbd>=urlencode(<span style="color: blue">$url</span>)
- & <kbd>method</kbd>=urlencode(<span style="color: blue">$method</span>)
- & <kbd>header</kbd>=urlencode(<span style="color: blue">{"k":"v"}</span>)
-</code>
+     <code><pre><span style="color: #2a7aaf;font-size: 16px">Bash CURL:</span>
+    curl -x http://$name:$psw@{{.proxy_host}}:{{.proxy_port}} 'https://hidu.github.io/hello.md'
+    </pre></code>
 
-<p>e.g.:</p>
-<pre>
-curl 'http://$name:$psw@{{.proxy_host}}:{{.proxy_port}}/query?url=https://hidu.github.io/hello.md
-</pre>
+    <p class="h5">2. API </p>
+     <p class="h6">2.1 /query </p>
+     <p>Handle it as a normal web service and proxy the request.</p>
+    <code>
+     curl 'http://$name:$psw@{{.proxy_host}}:{{.proxy_port}}/query?
+     <kbd>url</kbd>=urlencode(<span style="color: blue">$url</span>)
+     & <kbd>method</kbd>=urlencode(<span style="color: blue">$method</span>)
+     & <kbd>header</kbd>=urlencode(<span style="color: blue">{"k":"v"}</span>)
+    </code>
 
-<pre>
- curl 'http://$name:$psw@{{.proxy_host}}:{{.proxy_port}}/query?method=POST&url=https://hidu.github.io/hello.md&header={"k1":"v1"}' \
-  -X POST --data "request body"
-</pre>
+    <p>e.g.:</p>
+    <pre>
+    curl 'http://$name:$psw@{{.proxy_host}}:{{.proxy_port}}/query?url=https://hidu.github.io/hello.md
+    </pre>
 
- <p class="h6">2.2 /fetch </p>
- <p>(Logged-in user)Get an available proxy.</p>
+    <pre>
+     curl 'http://$name:$psw@{{.proxy_host}}:{{.proxy_port}}/query?method=POST&url=https://hidu.github.io/hello.md&header={"k1":"v1"}' \
+      -X POST --data "request body"
+    </pre>
 
- <p class="h6">2.2 /clean </p>
- <p>(Admin user) Check (connect success) and Clean invalid Dyn Proxies.</p>
+     <p class="h6">2.2 /fetch </p>
+     <p>(Logged-in user)Get an available proxy.</p>
 
- <p class="h6">2.3 /start_check </p>
- <p>(Admin user) Start Health checker.</p>
+     <p class="h6">2.2 /clean </p>
+     <p>(Admin user) Check (connect success) and Clean invalid Dyn Proxies.</p>
 
- <p class="h6">2.4 /cancel </p>
- <p>(Admin user) Stop Health checker.</p>
+     <p class="h6">2.3 /start_check </p>
+     <p>(Admin user) Start Health checker.</p>
 
- <p class="h6">2.5 /status </p>
- <p>Status information.</p>
+     <p class="h6">2.4 /cancel </p>
+     <p>(Admin user) Stop Health checker.</p>
+
+     <p class="h6">2.5 /status </p>
+     <p>Status information.</p>
+ </div>

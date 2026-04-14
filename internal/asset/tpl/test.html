@@ -1,30 +1,32 @@
-<style>
-#test_form th{text-align: right}
-</style>
-
-<br>
-<div class="h6">Test Proxy:</div>
+<div class="container pt-5">
+<h5>Test Proxy:</h5>
 <form method="post" action="/test" id="test_form" target="_blank">
-<table width="80%">
-<tr>
-<th width="90px"><span style="color:red">*</span>URL:</th>
-<td>
-    <input type="url" name="url" value="https://ifconfig.me/all.json" style="width:85%" class="form-control" required autofocus placeholder="{{.checkURL}}">
-</td>
-</tr>
-<tr>
-<th>Proxy:</th>
-<td>
-    <input type="url" name="proxy" style="width:280px" class="form-control" placeholder="eg: http://uname:psw@10.0.2.2:3218">
-    <span style="color:gray">when empty, will use proxy in pool</span>
-</td>
-</tr>
-<tr>
-<th></th>
-<td style="text-align:center">
-    <input type="submit" value="test" class="btn btn-primary">
-</td>
-</tr>
-</table>
-<input type="hidden" name="token" value="{{.token}}">
+    <input type="hidden" name="token" value="{{.token}}">
+    <div class="row">
+        <div class="col-md-1 text-end"><span style="color:red">*</span>URL:</div>
+        <div class="col-md-6">
+            <input type="url" name="url" value="https://ifconfig.me/all.json" class="form-control w100" required autofocus placeholder="{{.checkURL}}">
+        </div>
+        <div class="col-md-5">
+            <span class="form-text mt-2">visit this URL via proxy</span>
+        </div>
+    </div>
+    <div class="row mt-2">
+        <div class="col-md-1 text-end">
+            Proxy:
+        </div>
+        <div class="col-md-6">
+            <input type="url" name="proxy" class="form-control w100" placeholder="eg: http://uname:psw@10.0.2.2:3218">
+        </div>
+        <div class="col-md-5">
+            <span class="form-text">when empty, will use proxy in pool</span>
+        </div>
+    </div>
+    <div class="row mt-2">
+        <div class="col-2"></div>
+        <div class="col-2">
+            <input type="submit" value="Do Test" class="btn btn-primary">
+        </div>
+    </div>
 </form>
+</div>

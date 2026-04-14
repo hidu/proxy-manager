@@ -108,9 +108,12 @@ func loadUsers(confPath string) (users map[string]*User, err error) {
 	return users, nil
 }
 
+func authType() string {
+	return xattr.GetDefault[string]("AuthType", AuthTypeNO)
+}
+
 func checkHTTPAuth(user *User) bool {
-	authType := xattr.GetDefault[string]("AuthType", AuthTypeNO)
-	switch authType {
+	switch authType() {
 	case AuthTypeNO:
 		return true
 	case AuthTypeBasic:

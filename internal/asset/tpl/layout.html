@@ -5,39 +5,39 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="src" content="https://github.com/hidu/proxy-manager">
 <title>proxy-manager | {{.version}}</title>
-<link rel="stylesheet" href="asset/css/flat.css">
-<link rel="stylesheet" href="asset/css/style.css">
+<link rel="stylesheet" href="asset/bootstrap/bootstrap.css">
+<link rel="stylesheet" href="asset/style.css">
 </head>
 <body>
+
 <div id="nav">
-<div id="menu">
-       <ul id="left_submenu">
-           <li class="border_first"><a href="/">index</a></li>
-           <li><a href="add">add</a></li>
-           <li><a href="test">test</a></li>
-           <li><a href="about">about</a></li>
-       </ul>
-       
-       <div class='right'>
-          <ul>
-            {{if .isLogin}}
-              <li>{{.uname}}</li> 
-              <li><a href="logout">logout</a></li>
-             {{else}}
-              <li><a href="login">login</a></li>
-            {{end}}
-         </ul> 
-         </div>
-       <div class="clear"></div>
-</div>
+    <div class="container">
+        <div id="menu">
+            <ul id="left_submenu">
+                <li class="border_first"><a href="/">Home</a></li>
+                <li><a href="add">Add</a></li>
+                <li><a href="test">Test</a></li>
+                <li><a href="about">About</a></li>
+            </ul>
+
+            <div class='float-end'>
+                <ul>
+                    {{if .isLogin}}
+                    <li>{{.uname}}</li>
+                    <li><a href="logout">Logout</a></li>
+                    {{else}}
+                    <li><a href="login">Login</a></li>
+                    {{end}}
+                </ul>
+            </div>
+            <div class="clear"></div>
+        </div>
+    </div>
 </div>
 <div class="clear"></div>
-<div>
-<div id="bd0">
+
+<div class="container-fluid">
 {{.body | xHTML }}
 </div>
-</div>
-<div class="clear"></div>
-<div id="log_div"></div>
 </body>
 </html>

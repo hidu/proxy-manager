@@ -6,6 +6,7 @@ require (
 	github.com/shadowsocks/go-shadowsocks2 v0.1.5
 	github.com/xanygo/anygo v0.0.0-20260413060704-ea93067706b1
 	github.com/xanygo/ext v0.0.0-20260228134916-3cc748f50bb3
+	github.com/xanygo/webr v0.0.0-20260306023530-ca37de7dc1c0
 	golang.org/x/net v0.53.0
 	gopkg.in/yaml.v3 v3.0.1
 	h12.io/socks v1.0.3

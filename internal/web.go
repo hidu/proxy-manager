@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,11 +15,15 @@ import (
 	"time"
 
 	"github.com/xanygo/anygo/ds/xcmp"
+	"github.com/xanygo/anygo/ds/xctx"
 	"github.com/xanygo/anygo/ds/xslice"
 	"github.com/xanygo/anygo/ds/xsync"
 	"github.com/xanygo/anygo/ds/xurl"
 	"github.com/xanygo/anygo/xattr"
+	"github.com/xanygo/anygo/xhttp"
+	"github.com/xanygo/anygo/xio/xfs"
 	"github.com/xanygo/anygo/xlog"
+	"github.com/xanygo/webr"
 )
 
 const cookieName = "x-man-proxy"
@@ -32,8 +37,15 @@ type webCtx struct {
 	isLogin bool
 }
 
+func (ctx *webCtx) userName() string {
+	if ctx.user != nil {
+		return ctx.user.Name
+	}
+	return ""
+}
+
 func (ctx *webCtx) isAdmin() bool {
-	return ctx != nil && ctx.isLogin && ctx.user.Admin
+	return ctx != nil && ctx.isLogin && ctx.user != nil && ctx.user.Admin
 }
 
 func (ctx *webCtx) finalLog() {
@@ -47,21 +59,69 @@ func (ctx *webCtx) addLogMsg(msg ...any) {
 	ctx.logMsg += fmt.Sprint(msg...)
 }
 
-var web = &adminWeb{}
+var web = newAdminWeb()
 
-type adminWeb struct{}
+func newAdminWeb() *adminWeb {
+	aw := &adminWeb{
+		router: xhttp.NewRouter(),
+	}
+	aw.init()
+	return aw
+}
 
-func (aw *adminWeb) serveAdminPage(w http.ResponseWriter, req *http.Request) {
+type adminWeb struct {
+	router *xhttp.Router
+}
+
+func (aw *adminWeb) init() {
+	assetHandler := xhttp.FSHandlers{
+		&xhttp.FS{
+			FS: xfs.OverlayFS{
+				webr.Bootstrap(),
+			},
+		},
+		&xhttp.FS{
+			FS:      files,
+			RootDir: "asset/css",
+		},
+	}
+	aw.router.Get("/asset/*", http.StripPrefix("/asset/", assetHandler))
+
+	aw.router.GetFunc("/about", aw.handleAbout)
+	aw.router.GetFunc("/status", aw.handleStatus)
+	aw.router.GetFunc("/pick", aw.handlePick)
+
+	aw.router.GetFunc("/add", aw.handleAddGet)
+	aw.router.PostFunc("/add", aw.handleAddPost)
+
+	aw.router.GetFunc("/test", aw.handleTestGet)
+	aw.router.PostFunc("/test", aw.handleTestPost)
+
+	aw.router.GetFunc("/login", aw.handleLoginGet)
+	aw.router.PostFunc("/login", aw.handleLoginPost)
+
+	aw.router.HandleFunc("/logout", aw.handleLogout)
+	aw.router.HandleFunc("/clean", aw.handleClean)
+	aw.router.HandleFunc("/cancel", aw.handleCancel)
+	aw.router.HandleFunc("/start_check", aw.handleStartCheck)
+	aw.router.HandleFunc("/fetch", aw.handleFetch)
+
+	aw.router.GetFunc("/", aw.handleIndex)
+}
+
+var ctxKey = xctx.NewKey()
+
+func (aw *adminWeb) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	ctx := &webCtx{
 		req:   req,
 		start: time.Now(),
 	}
 	defer ctx.finalLog()
 
-	if strings.HasPrefix(req.URL.Path, "/asset/") {
-		http.FileServer(http.FS(files)).ServeHTTP(w, req)
-		return
-	}
+	// if strings.HasPrefix(req.URL.Path, "/asset/") {
+	//	http.FileServer(http.FS(files)).ServeHTTP(w, req)
+	//	return
+	// }
 
 	user, isLogin := aw.handleCheckLogin(req, ctx)
 
@@ -97,26 +157,9 @@ func (aw *adminWeb) serveAdminPage(w http.ResponseWriter, req *http.Request) {
 	ctx.user = user
 	ctx.isLogin = isLogin
 
-	funcMap := make(map[string]func(w http.ResponseWriter, req *http.Request, ctx *webCtx))
-
-	funcMap["/"] = aw.handleIndex
-	funcMap["/about"] = aw.handleAbout
-	funcMap["/add"] = aw.handleAdd
-	funcMap["/test"] = aw.handleTest
-	funcMap["/login"] = aw.handleLogin
-	funcMap["/logout"] = aw.handleLogout
-	funcMap["/status"] = aw.handleStatus
-	funcMap["/query"] = aw.handleQuery
-	funcMap["/fetch"] = aw.handleFetch
-	funcMap["/clean"] = aw.handleClean
-	funcMap["/cancel"] = aw.handleCancel
-	funcMap["/start_check"] = aw.handleStartCheck
-
-	if fn, has := funcMap[req.URL.Path]; has {
-		fn(w, req, ctx)
-	} else {
-		http.NotFound(w, req)
-	}
+	reqCtx := context.WithValue(req.Context(), ctxKey, ctx)
+	req = req.WithContext(reqCtx)
+	aw.router.ServeHTTP(w, req)
 }
 
 var sortChain = xcmp.Chain[*proxyEntry](
@@ -135,8 +178,12 @@ type KV struct {
 	Value any
 }
 
-func (aw *adminWeb) handleIndex(w http.ResponseWriter, _ *http.Request, ctx *webCtx) {
-	values := ctx.values
+func (aw *adminWeb) getWebCtx(ctx context.Context) *webCtx {
+	return ctx.Value(ctxKey).(*webCtx)
+}
+
+func (aw *adminWeb) handleIndex(w http.ResponseWriter, req *http.Request) {
+	values := aw.getWebCtx(req.Context()).values
 	usedTotal := defaultRelay.usedTotal.Load()
 	usedSuccess := defaultRelay.usedSuccess.Load()
 
@@ -177,61 +224,56 @@ func (aw *adminWeb) handleIndex(w http.ResponseWriter, _ *http.Request, ctx *web
 }
 
 // handleAdd 添加新代理地址
-func (aw *adminWeb) handleAdd(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
+func (aw *adminWeb) handleAddGet(w http.ResponseWriter, req *http.Request) {
+	ctx := aw.getWebCtx(req.Context())
 	values := ctx.values
-	doPost := func() {
-		if !ctx.isAdmin() {
-			ctx.addLogMsg("not admin")
-			_, _ = w.Write([]byte("<script>alert('must admin');</script>"))
-			return
-		}
-		str := req.PostFormValue("proxy")
-		isApi := str != ""
-		var proxiesTxt string
-		if isApi {
-			proxiesTxt = "proxy=" + str
-		} else {
-			proxiesTxt = req.PostFormValue("proxies")
-		}
-
-		proxies := parserProxiesFromTxt(proxiesTxt)
-		if proxies.Total() == 0 {
-			ctx.addLogMsg("no proxy, form input:[", proxiesTxt, "]")
-			_, _ = w.Write([]byte("<script>alert('no proxy');</script>"))
-			return
-		}
-		n := 0
-		proxies.Range(func(proxyURL string, p *proxyEntry) bool {
-			if pool.all.Add(p) {
-				n++
-				pool.dyn.Add(p)
-			}
-			return true
-		})
-
-		_, _ = fmt.Fprintf(w, "<script>alert('add %d new proxy');</script>", n)
-		ctx.addLogMsg("add new proxy total:", n)
-	}
-
-	switch req.Method {
-	case "GET":
-		code := renderHTML("add.html", values, true)
-		_, _ = w.Write(code)
-		return
-	case "POST":
-		doPost()
-		return
-	}
-	http.NotFound(w, req)
+	code := renderHTML("add.html", values, true)
+	_, _ = w.Write(code)
 }
 
-func (aw *adminWeb) handleAbout(w http.ResponseWriter, _ *http.Request, ctx *webCtx) {
+func (aw *adminWeb) handleAddPost(w http.ResponseWriter, req *http.Request) {
+	ctx := aw.getWebCtx(req.Context())
+	if !ctx.isAdmin() {
+		ctx.addLogMsg("not admin")
+		_, _ = w.Write([]byte("<script>alert('must admin');</script>"))
+		return
+	}
+	str := req.PostFormValue("proxy")
+	isApi := str != ""
+	var proxiesTxt string
+	if isApi {
+		proxiesTxt = "proxy=" + str
+	} else {
+		proxiesTxt = req.PostFormValue("proxies")
+	}
+
+	proxies := parserProxiesFromTxt(proxiesTxt)
+	if proxies.Total() == 0 {
+		ctx.addLogMsg("no proxy, form input:[", proxiesTxt, "]")
+		_, _ = w.Write([]byte("<script>alert('no proxy');</script>"))
+		return
+	}
+	n := 0
+	proxies.Range(func(proxyURL string, p *proxyEntry) bool {
+		if pool.all.Add(p) {
+			n++
+			pool.dyn.Add(p)
+		}
+		return true
+	})
+
+	_, _ = fmt.Fprintf(w, "<script>alert('add %d new proxy');</script>", n)
+	ctx.addLogMsg("add new proxy total:", n)
+}
+
+func (aw *adminWeb) handleAbout(w http.ResponseWriter, req *http.Request) {
+	ctx := aw.getWebCtx(req.Context())
 	values := ctx.values
 	code := renderHTML("about.html", values, true)
 	_, _ = w.Write(code)
 }
 
-func (aw *adminWeb) handleLogout(w http.ResponseWriter, req *http.Request, _ *webCtx) {
+func (aw *adminWeb) handleLogout(w http.ResponseWriter, req *http.Request) {
 	cookie := &http.Cookie{Name: cookieName, Value: "", Path: "/"}
 	http.SetCookie(w, cookie)
 	if _, _, ok := req.BasicAuth(); ok {
@@ -242,7 +284,7 @@ func (aw *adminWeb) handleLogout(w http.ResponseWriter, req *http.Request, _ *we
 	http.Redirect(w, req, "/", http.StatusFound)
 }
 
-func (aw *adminWeb) handleStatus(w http.ResponseWriter, _ *http.Request, _ *webCtx) {
+func (aw *adminWeb) handleStatus(w http.ResponseWriter, _ *http.Request) {
 	usedTotal := defaultRelay.usedTotal.Load()
 	usedSuccess := defaultRelay.usedSuccess.Load()
 	values := map[string]any{
@@ -276,101 +318,98 @@ func init() {
 }
 
 // handleTest  测试一个代理是否可以正常使用
-func (aw *adminWeb) handleTest(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
+func (aw *adminWeb) handleTestGet(w http.ResponseWriter, req *http.Request) {
+	ctx := aw.getWebCtx(req.Context())
 	values := ctx.values
-	doPost := func() {
-		token := req.PostFormValue("token")
-		if token != staticToken {
-			ctx.addLogMsg("invalid token", token)
-			_, _ = w.Write([]byte("invalid token"))
-			return
-		}
-		urlStr := strings.TrimSpace(req.PostFormValue("url"))
-		obj, err := url.Parse(urlStr)
-		if err != nil || !strings.HasPrefix(obj.Scheme, "http") {
-			ctx.addLogMsg("test with invalid url:", urlStr)
-			_, _ = fmt.Fprintf(w, "invalid input url [%q], err: %v", urlStr, err)
-			return
-		}
-		proxyStr := strings.TrimSpace(req.PostFormValue("proxy"))
-		ctx.addLogMsg("test proxy [", proxyStr, "], url [", urlStr, "]")
+	values["checkURL"] = getProbeURL()
+	values["token"] = staticToken
 
-		var testResult bool
-
-		var pu *url.URL
-		if proxyStr != "" {
-			pu, err = url.Parse(proxyStr)
-			if err != nil {
-				ctx.addLogMsg("proxy info err:", err)
-				_, _ = fmt.Fprintf(w, "wrong proxy info [%s],err:%v", proxyStr, err)
-				return
-			}
-		} else {
-			pe, err := pool.getOneProxyActive("test")
-			if err != nil {
-				w.Write([]byte("getOneProxyActive failed:" + err.Error()))
-				return
-			}
-			pu = pe.Base.URL
-			pe.State.UsedTotal.Add(1)
-			defer func() {
-				if testResult {
-					pe.State.UsedSuccess.Add(1)
-				}
-			}()
-		}
-		resp, err := httpGetByProxyURL(req.Context(), urlStr, pu)
-		if err != nil {
-			w.WriteHeader(502)
-			_, _ = fmt.Fprintf(w, "can not get [%s] via [%s]\nerr:%s", urlStr, proxyStr, err)
-			ctx.addLogMsg("failed, url=", urlStr, ",err=", err)
-			return
-		}
-		testResult = true
-		defer resp.Body.Close()
-		copyProxyResponseHeaders(w.Header(), resp.Header)
-		w.WriteHeader(resp.StatusCode)
-		_, _ = io.Copy(w, resp.Body)
-	}
-
-	switch req.Method {
-	case "GET":
-		values["checkURL"] = getProbeURL()
-		values["token"] = staticToken
-
-		code := renderHTML("test.html", values, true)
-		_, _ = w.Write(code)
-		return
-	case "POST":
-		doPost()
-		return
-	}
-	http.NotFound(w, req)
+	code := renderHTML("test.html", values, true)
+	_, _ = w.Write(code)
 }
 
-func (aw *adminWeb) handleLogin(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
-	values := ctx.values
-	if req.Method == "POST" {
-		name := req.PostFormValue("name")
-		psw := req.PostFormValue("psw")
-		user := getUser(name)
-		if user != nil && user.pswEq(psw) {
-			ctx.addLogMsg("login suc,name=", name)
-			cookie := &http.Cookie{
-				Name:    cookieName,
-				Value:   fmt.Sprintf("%s:%s", name, user.PswEnc()),
-				Path:    "/",
-				Expires: time.Now().Add(86400 * time.Second),
-			}
-			http.SetCookie(w, cookie)
-			_, _ = w.Write([]byte("<script>parent.location.href='/'</script>"))
-		} else {
-			ctx.addLogMsg("login failed,name=", name, "psw=", psw)
-			_, _ = w.Write([]byte("<script>alert('login failed')</script>"))
+// handleTest  测试一个代理是否可以正常使用
+func (aw *adminWeb) handleTestPost(w http.ResponseWriter, req *http.Request) {
+	ctx := aw.getWebCtx(req.Context())
+	token := req.PostFormValue("token")
+	if token != staticToken {
+		ctx.addLogMsg("invalid token", token)
+		_, _ = w.Write([]byte("invalid token"))
+		return
+	}
+	urlStr := strings.TrimSpace(req.PostFormValue("url"))
+	obj, err := url.Parse(urlStr)
+	if err != nil || !strings.HasPrefix(obj.Scheme, "http") {
+		ctx.addLogMsg("test with invalid url:", urlStr)
+		_, _ = fmt.Fprintf(w, "invalid input url [%q], err: %v", urlStr, err)
+		return
+	}
+	proxyStr := strings.TrimSpace(req.PostFormValue("proxy"))
+	ctx.addLogMsg("test proxy [", proxyStr, "], url [", urlStr, "]")
+
+	var testResult bool
+
+	var pu *url.URL
+	if proxyStr != "" {
+		pu, err = url.Parse(proxyStr)
+		if err != nil {
+			ctx.addLogMsg("proxy info err:", err)
+			_, _ = fmt.Fprintf(w, "wrong proxy info [%s],err:%v", proxyStr, err)
+			return
 		}
 	} else {
-		code := renderHTML("login.html", values, true)
-		_, _ = w.Write(code)
+		pe, err := pool.getOneProxyActive("test")
+		if err != nil {
+			w.Write([]byte("getOneProxyActive failed:" + err.Error()))
+			return
+		}
+		pu = pe.Base.URL
+		pe.State.UsedTotal.Add(1)
+		defer func() {
+			if testResult {
+				pe.State.UsedSuccess.Add(1)
+			}
+		}()
+	}
+	resp, err := httpGetByProxyURL(req.Context(), urlStr, pu)
+	if err != nil {
+		w.WriteHeader(502)
+		_, _ = fmt.Fprintf(w, "can not get [%s] via [%s]\nerr:%s", urlStr, proxyStr, err)
+		ctx.addLogMsg("failed, url=", urlStr, ",err=", err)
+		return
+	}
+	testResult = true
+	defer resp.Body.Close()
+	copyProxyResponseHeaders(w.Header(), resp.Header)
+	w.WriteHeader(resp.StatusCode)
+	_, _ = io.Copy(w, resp.Body)
+}
+
+func (aw *adminWeb) handleLoginGet(w http.ResponseWriter, req *http.Request) {
+	ctx := aw.getWebCtx(req.Context())
+	values := ctx.values
+	code := renderHTML("login.html", values, true)
+	_, _ = w.Write(code)
+}
+
+func (aw *adminWeb) handleLoginPost(w http.ResponseWriter, req *http.Request) {
+	ctx := aw.getWebCtx(req.Context())
+	name := req.PostFormValue("name")
+	psw := req.PostFormValue("psw")
+	user := getUser(name)
+	if user != nil && user.pswEq(psw) {
+		ctx.addLogMsg("login suc,name=", name)
+		cookie := &http.Cookie{
+			Name:    cookieName,
+			Value:   fmt.Sprintf("%s:%s", name, user.PswEnc()),
+			Path:    "/",
+			Expires: time.Now().Add(86400 * time.Second),
+		}
+		http.SetCookie(w, cookie)
+		_, _ = w.Write([]byte("<script>parent.location.href='/'</script>"))
+	} else {
+		ctx.addLogMsg("login failed,name=", name, "psw=", psw)
+		_, _ = w.Write([]byte("<script>alert('login failed')</script>"))
 	}
 }
 
@@ -412,8 +451,9 @@ func (aw *adminWeb) handleCheckLogin(req *http.Request, ctx *webCtx) (user *User
 	return nil, false
 }
 
-func (aw *adminWeb) handleQuery(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
-	if !ctx.isLogin {
+func (aw *adminWeb) handleFetch(w http.ResponseWriter, req *http.Request) {
+	ctx := aw.getWebCtx(req.Context())
+	if authType() != AuthTypeNO && !ctx.isLogin {
 		notLoginHandler(w, req)
 		return
 	}
@@ -444,11 +484,12 @@ func (aw *adminWeb) handleQuery(w http.ResponseWriter, req *http.Request, ctx *w
 			request.Header.Add(k, v)
 		}
 	}
-	defaultRelay.forwardRequest(req.Context(), w, request, ctx.user.Name)
+	defaultRelay.forwardRequest(req.Context(), w, request, ctx.userName())
 }
 
-// handleFetch 获取一个代理服务器
-func (aw *adminWeb) handleFetch(w http.ResponseWriter, _ *http.Request, ctx *webCtx) {
+// handlePick 获取一个代理服务器
+func (aw *adminWeb) handlePick(w http.ResponseWriter, req *http.Request) {
+	ctx := aw.getWebCtx(req.Context())
 	if !ctx.isLogin {
 		data := map[string]any{
 			"Code": 1,
@@ -458,7 +499,7 @@ func (aw *adminWeb) handleFetch(w http.ResponseWriter, _ *http.Request, ctx *web
 		ctx.addLogMsg("auth failed")
 		return
 	}
-	one, err := pool.getOneProxyActive(ctx.user.Name)
+	one, err := pool.getOneProxyActive(ctx.userName())
 	if err != nil {
 		data := map[string]any{
 			"Code": 2,
@@ -476,7 +517,8 @@ func (aw *adminWeb) handleFetch(w http.ResponseWriter, _ *http.Request, ctx *web
 	writeJSON(w, http.StatusOK, data)
 }
 
-func (aw *adminWeb) handleClean(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
+func (aw *adminWeb) handleClean(w http.ResponseWriter, req *http.Request) {
+	ctx := aw.getWebCtx(req.Context())
 	if !ctx.isAdmin() {
 		notLoginHandler(w, req)
 		return
@@ -489,7 +531,8 @@ func (aw *adminWeb) handleClean(w http.ResponseWriter, req *http.Request, ctx *w
 
 var silentDeadline xsync.TimeStamp
 
-func (aw *adminWeb) handleCancel(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
+func (aw *adminWeb) handleCancel(w http.ResponseWriter, req *http.Request) {
+	ctx := aw.getWebCtx(req.Context())
 	if !ctx.isAdmin() {
 		notLoginHandler(w, req)
 		return
@@ -499,7 +542,8 @@ func (aw *adminWeb) handleCancel(w http.ResponseWriter, req *http.Request, ctx *
 	w.Write([]byte("Ok"))
 }
 
-func (aw *adminWeb) handleStartCheck(w http.ResponseWriter, req *http.Request, ctx *webCtx) {
+func (aw *adminWeb) handleStartCheck(w http.ResponseWriter, req *http.Request) {
+	ctx := aw.getWebCtx(req.Context())
 	if !ctx.isAdmin() {
 		notLoginHandler(w, req)
 		return

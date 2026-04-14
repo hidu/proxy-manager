@@ -37,5 +37,5 @@ func (gw *gateway) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		defaultRelay.ServeHTTP(w, req)
 		return
 	}
-	web.serveAdminPage(w, req)
+	web.ServeHTTP(w, req)
 }
