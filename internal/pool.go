@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/xanygo/anygo/ds/xctx"
 	"github.com/xanygo/anygo/ds/xslice"
 	"github.com/xanygo/anygo/ds/xsync"
 	"github.com/xanygo/anygo/safely"
@@ -103,12 +104,20 @@ func (p *ProxyPool) parserConfigFile(confName string) (*ProxyList, error) {
 
 var errorNoProxy = errors.New("no active proxy")
 
-func (p *ProxyPool) getOneProxyActive(uname string) (*proxyEntry, error) {
-	one := p.active.Next()
-	if one == nil {
-		return nil, errorNoProxy
+var ctxKeyUseProxy = xctx.NewKey()
+
+func contextWithProxyEntry(ctx context.Context, p *proxyEntry) context.Context {
+	return context.WithValue(ctx, ctxKeyUseProxy, p)
+}
+
+func (p *ProxyPool) getOneProxyActive(ctx context.Context, uname string) (*proxyEntry, error) {
+	if val, ok := ctx.Value(ctxKeyUseProxy).(*proxyEntry); ok {
+		return val, nil
 	}
-	return one, nil
+	if one := p.active.Next(); one != nil {
+		return one, nil
+	}
+	return nil, errorNoProxy
 }
 
 var producerRunning atomic.Bool

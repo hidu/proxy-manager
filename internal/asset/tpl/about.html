@@ -11,6 +11,10 @@
     <p class="h4">Usage:</p>
 
     <p class="h5">1. As HTTP/HTTPS Proxy Server</p>
+     <code><pre><span style="color: #2a7aaf;font-size: 16px">Bash CURL:</span>
+    curl -x http://$name:$psw@{{.proxy_host}}:{{.proxy_port}} 'https://hidu.github.io/hello.md'
+    </pre></code>
+
      <code><pre><span style="color: #2a7aaf;font-size: 16px">PHP:</span>
     ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, "https://hidu.github.io/hello.md");
@@ -37,42 +41,47 @@
     }
     </pre></code>
 
-     <code><pre><span style="color: #2a7aaf;font-size: 16px">Bash CURL:</span>
-    curl -x http://$name:$psw@{{.proxy_host}}:{{.proxy_port}} 'https://hidu.github.io/hello.md'
-    </pre></code>
-
     <p class="h5">2. API </p>
-     <p class="h6">2.1 /query </p>
-     <p>Handle it as a normal web service and proxy the request.</p>
+     <p class="h6 fw-bold text-primary">2.1 /fetch </p>
+     <p>Fetch the target URL via a configured proxy server.</p>
     <code>
-     curl 'http://$name:$psw@{{.proxy_host}}:{{.proxy_port}}/query?
+     http://$name:$psw@{{.proxy_host}}:{{.proxy_port}}/fetch?
      <kbd>url</kbd>=urlencode(<span style="color: blue">$url</span>)
-     & <kbd>method</kbd>=urlencode(<span style="color: blue">$method</span>)
-     & <kbd>header</kbd>=urlencode(<span style="color: blue">{"k":"v"}</span>)
+     &<kbd>method</kbd>=<span style="color: blue">POST</span>
+     &<kbd>header</kbd>=urlencode(<span style="color: blue">{"k":"v"}</span>)
+     &<kbd>retry</kbd>=<span style="color: blue">3</span>
     </code>
+     <p>
+     <ul>
+         <li>url: required, a valid URL starting with http:// or https://</li>
+         <li>method: optional, HTTP method (default: "GET")</li>
+         <li>header: optional, HTTP headers in JSON format (e.g. {"k":"v"})</li>
+         <li>retry: optional, number of retry attempts</li>
+     </ul>
+     </p>
 
     <p>e.g.:</p>
-    <pre>
-    curl 'http://$name:$psw@{{.proxy_host}}:{{.proxy_port}}/query?url=https://hidu.github.io/hello.md
-    </pre>
+    <pre>curl 'http://$name:$psw@{{.proxy_host}}:{{.proxy_port}}/fetch?url=https://hidu.github.io/hello.md'</pre>
 
-    <pre>
-     curl 'http://$name:$psw@{{.proxy_host}}:{{.proxy_port}}/query?method=POST&url=https://hidu.github.io/hello.md&header={"k1":"v1"}' \
-      -X POST --data "request body"
-    </pre>
+    <pre>curl 'http://$name:$psw@{{.proxy_host}}:{{.proxy_port}}/fetch?method=POST&url=https://hidu.github.io/hello.md&header={"k1":"v1"}' \
+      -X POST --data "request body"</pre>
 
-     <p class="h6">2.2 /fetch </p>
+     <p class="h6 fw-bold text-primary">2.2 /direct </p>
+     <p>Fetch the target URL using the local network without a proxy.</p>
+     <p>Parameters are the same as /fetch.</p>
+
+     <p class="h6 fw-bold text-primary">2.3 /pick </p>
      <p>(Logged-in user)Get an available proxy.</p>
 
-     <p class="h6">2.2 /clean </p>
+     <p class="h6 fw-bold text-primary">2.4 /clean </p>
      <p>(Admin user) Check (connect success) and Clean invalid Dyn Proxies.</p>
 
-     <p class="h6">2.3 /start_check </p>
+     <p class="h6 fw-bold text-primary">2.5 /start_check </p>
      <p>(Admin user) Start Health checker.</p>
 
-     <p class="h6">2.4 /cancel </p>
+     <p class="h6 fw-bold text-primary">2.5 /cancel </p>
      <p>(Admin user) Stop Health checker.</p>
 
-     <p class="h6">2.5 /status </p>
+     <p class="h6 fw-bold text-primary">2.7 /status </p>
      <p>Status information.</p>
  </div>

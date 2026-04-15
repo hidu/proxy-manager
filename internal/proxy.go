@@ -25,6 +25,15 @@ import (
 	"github.com/hidu/proxy-manager/internal/transport"
 )
 
+// directEntry 使用这个，总是会从本机自己发出请求（host 和 port 不会实际使用，合法即可）
+var directEntry = newProxy("direct://localhost:1")
+
+func init() {
+	if directEntry == nil {
+		panic("directEntry is nil")
+	}
+}
+
 func loadProxies(filename string) ([]*proxyBase, error) {
 	config := &ProxiesFile{}
 	err := xcfg.Parse(filename, config)

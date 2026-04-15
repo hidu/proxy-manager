@@ -1,7 +1,9 @@
 <br/>
-<p>{{.notice}}</p>
+{{ if .notice }}
+<p class="text-center card p-2 text-bg-warning">{{.notice}}</p>
+{{ end }}
 
-<div class="row">
+<div class="row mt-2">
     <div class="col-md-6">
         {{ template "index/status" . }}
     </div>

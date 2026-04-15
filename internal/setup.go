@@ -12,7 +12,7 @@ func Setup() {
 	pool = loadPool()
 }
 
-var version = "0.4.20260412"
+var version = "1.0.20260415"
 
 const timeFormatStd = "2006-01-02 15:04:05"
 
