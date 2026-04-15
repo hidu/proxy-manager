@@ -505,6 +505,7 @@ func (aw *adminWeb) handleFetch(w http.ResponseWriter, req *http.Request) {
 		Request:  request,
 		Username: wc.userName(),
 		Attempt:  max(attempt, 1),
+		Format:   xurl.StringDef(qs, "format", ""),
 	}
 
 	defaultRelay.forwardRequest(req.Context(), w, param)

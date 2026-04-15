@@ -114,3 +114,7 @@ func parseProxyLine(info map[string]string) *proxyEntry {
 	p.Base.Weight = int(intValues["weight"])
 	return p
 }
+
+func getMaxResponseSize() int64 {
+	return xattr.GetDefault[int64]("MaxResponseSize", 0)
+}

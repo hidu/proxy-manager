@@ -16,6 +16,7 @@ import (
 	"github.com/xanygo/anygo/xlog"
 	"github.com/xanygo/anygo/xvalidator"
 
+	"github.com/hidu/proxy-manager/internal/htmlsanitize"
 	"github.com/hidu/proxy-manager/internal/transport"
 )
 
@@ -129,18 +130,23 @@ func (hc *reply) handleHTTP(w http.ResponseWriter, req *http.Request, user *User
 type forwardParam struct {
 	Request  *http.Request
 	Username string
-	Attempt  int
+
+	Attempt int // 总尝试次数，retry+1
+
+	// 输出格式：默认为空，即原样输出
+	// clean: 输出清理过的 html 代码
+	Format string
 }
 
 // forwardParam 转发代理请求，rr *http.Request 是要经过代理服务器的请求信息
-func (hc *reply) forwardRequest(ctx context.Context, w http.ResponseWriter, rr forwardParam) {
+func (hc *reply) forwardRequest(ctx context.Context, w http.ResponseWriter, param forwardParam) {
 	var p *proxyEntry
 	var err error
 	var resp *http.Response
 	var i int
-	for i = 0; i < rr.Attempt; i++ {
+	for i = 0; i < param.Attempt; i++ {
 		hc.usedTotal.Add(1)
-		p, err = pool.getOneProxyActive(ctx, rr.Username)
+		p, err = pool.getOneProxyActive(ctx, param.Username)
 		if err != nil {
 			xlog.Warn(ctx, "getOneProxyActive failed", xlog.ErrorAttr("Error", err))
 			continue
@@ -154,7 +160,7 @@ func (hc *reply) forwardRequest(ctx context.Context, w http.ResponseWriter, rr f
 			continue
 		}
 
-		resp, err = client.Do(rr.Request)
+		resp, err = client.Do(param.Request)
 		if err != nil {
 			xlog.Warn(ctx, "fetch response failed", xlog.ErrorAttr("Error", err))
 			continue
@@ -167,12 +173,23 @@ func (hc *reply) forwardRequest(ctx context.Context, w http.ResponseWriter, rr f
 	resp.Header.Del("Connection")
 
 	copyProxyResponseHeaders(w.Header(), resp.Header)
-	w.Header().Set("X-Man-Attempt", fmt.Sprintf("%d/%d", i, rr.Attempt))
+	w.Header().Set("X-Man-Attempt", fmt.Sprintf("%d/%d", i, param.Attempt))
 	w.Header().Set("X-Man-Via", p.Base.URL.Hostname())
 
-	w.WriteHeader(resp.StatusCode)
+	if strings.Contains(resp.Header.Get("Content-Type"), "text/html") && param.Format == "clean" {
+		var rd io.Reader = resp.Body
+		if num := getMaxResponseSize(); num > 0 {
+			rd = io.LimitReader(rd, num)
+		}
+		bf, _ := htmlsanitize.CleanReader(rd)
+		w.Header().Set("Content-Length", strconv.Itoa(len(bf)))
+		w.WriteHeader(resp.StatusCode)
+		w.Write(bf)
+	} else {
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body)
+	}
 
-	io.Copy(w, resp.Body)
 	p.State.UsedSuccess.Add(1)
 	hc.usedSuccess.Add(1)
 }

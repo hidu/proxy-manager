@@ -32,4 +32,7 @@ ProxyRetry: 2
 # 客户端通过 HTTP Header [X-Man-Retry] 指定 ProxyReTry
 ProxyRetryMax: 10
 
+# 最大响应 Body 大小,当需要对Body 处理时，读取
+MaxResponseSize: 0
+
 

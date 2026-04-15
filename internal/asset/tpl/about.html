@@ -50,6 +50,7 @@
      &<kbd>method</kbd>=<span style="color: blue">POST</span>
      &<kbd>header</kbd>=urlencode(<span style="color: blue">{"k":"v"}</span>)
      &<kbd>retry</kbd>=<span style="color: blue">3</span>
+     &<kbd>format</kbd>=<span style="color: blue">clean</span>
     </code>
      <p>
      <ul>
@@ -57,6 +58,7 @@
          <li>method: optional, HTTP method (default: "GET")</li>
          <li>header: optional, HTTP headers in JSON format (e.g. {"k":"v"})</li>
          <li>retry: optional, number of retry attempts</li>
+         <li>format: optional, available value: <kbd>clean</kbd> — returns sanitized HTML (with JS, CSS, etc. removed)</li>
      </ul>
      </p>
 
