@@ -76,11 +76,12 @@
     <tr>
         <th rowspan="2" style="width: 70px">No.</th>
         <th rowspan="2" style="width: 200px">Address</th>
-        <th colspan="4" style="width: 60%">Health Check</th>
+        <th colspan="5" style="width: 60%">Health Check</th>
         <th colspan="3" style="width: 180px">Usage Statistics</th>
     </tr>
     <tr>
-        <th >Time</th>
+        <th >Times</th>
+        <th >Latest</th>
         <th style="width: 80px">Status Code</th>
         <th title="ms" style="width: 100px">Delay</th>
         <th>Message</th>
@@ -96,6 +97,8 @@
     <tr>
         <td class="t_c" nowrap="nowrap">{{ xMathAdd $index 1 }}</td>
         <td nowrap="nowrap">{{ $proxy.Base.Proxy }}</td>
+
+        <td class="t_c" nowrap="nowrap">{{ $proxy.State.CheckTimes.Load  }}</td>
 
         <td class="t_c" nowrap="nowrap">{{ $proxy.State.LastCheck.Load | xDateTime }}</td>
         <td class="t_c">

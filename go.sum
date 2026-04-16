@@ -28,8 +28,8 @@ github.com/shadowsocks/go-shadowsocks2 v0.1.5 h1:PDSQv9y2S85Fl7VBeOMF9StzeXZyK1H
 github.com/shadowsocks/go-shadowsocks2 v0.1.5/go.mod h1:AGGpIoek4HRno4xzyFiAtLHkOpcoznZEkAccaI/rplM=
 github.com/stretchr/testify v1.8.4 h1:CcVxjf3Q8PM0mHUKJCdn+eZZtm5yQwehR5yeSVQQcUk=
 github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXlSw2iwfAo=
-github.com/xanygo/anygo v0.0.0-20260413060704-ea93067706b1 h1:aPEn4w/NmIrYORuFd0FjDxV5bHVnLExuJpDKSXZkarw=
-github.com/xanygo/anygo v0.0.0-20260413060704-ea93067706b1/go.mod h1:Du0CyxgRsRpRGSCnt6Pye9R/uVJZEHrtlI0KvI7P6MI=
+github.com/xanygo/anygo v0.0.0-20260415121209-00757e152a0e h1:RfQERN9AWN8YirP9uDR3jrhRRGcwnAB9ERs0CFbD17c=
+github.com/xanygo/anygo v0.0.0-20260415121209-00757e152a0e/go.mod h1:Du0CyxgRsRpRGSCnt6Pye9R/uVJZEHrtlI0KvI7P6MI=
 github.com/xanygo/ext v0.0.0-20260228134916-3cc748f50bb3 h1:9Exazns7We4PG1zz7VlmEEbKRy7fPkZUxmsL0xgMom8=
 github.com/xanygo/ext v0.0.0-20260228134916-3cc748f50bb3/go.mod h1:oA/AXNxxdvMSVsTnrdcOFmYIGr2TZwjx8LpVqugWOVo=
 github.com/xanygo/webr v0.0.0-20260306023530-ca37de7dc1c0 h1:GawZ9B1X8vv63YQ90KB4Xcpx0GF1SwUIpM+XoDt3/cc=

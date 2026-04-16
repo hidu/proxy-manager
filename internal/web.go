@@ -20,6 +20,7 @@ import (
 	"github.com/xanygo/anygo/ds/xslice"
 	"github.com/xanygo/anygo/ds/xsync"
 	"github.com/xanygo/anygo/ds/xurl"
+	"github.com/xanygo/anygo/safely"
 	"github.com/xanygo/anygo/xattr"
 	"github.com/xanygo/anygo/xhttp"
 	"github.com/xanygo/anygo/xio/xfs"
@@ -107,9 +108,8 @@ func (aw *adminWeb) init() {
 	aw.router.GetFunc("/start_check", aw.handleStartCheck)
 
 	// 支持多种 Method
-	aw.router.HandleFunc("/fetch", aw.handleFetch)
-
-	aw.router.HandleFunc("/direct", aw.handleDirect)
+	aw.router.HandleFunc("/fetch", aw.handleFetch)   // 通过代理访问
+	aw.router.HandleFunc("/direct", aw.handleDirect) // 直接访问
 
 	aw.router.GetFunc("/", aw.handleIndex)
 }
@@ -123,7 +123,10 @@ func (aw *adminWeb) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 	defer wc.finalLog()
 
-	user, isLogin := aw.handleCheckLogin(req, wc)
+	user, isLogin := aw.preCheckLogin(req)
+
+	wc.user = user
+	wc.isLogin = isLogin
 
 	values := make(map[string]any)
 
@@ -146,19 +149,41 @@ func (aw *adminWeb) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	values["Listen"] = xattr.AppMain().MustGetListen("main")
 
-	// values["proxyReqTotal"] = pool.Count.Total
-
 	_host, _port, _ := getHostPortFromReq(req)
 	values["proxy_host"] = _host
 	values["proxy_port"] = _port
 
 	wc.values = values
-	wc.user = user
-	wc.isLogin = isLogin
 
 	reqCtx := context.WithValue(req.Context(), ctxKey, wc)
 	req = req.WithContext(reqCtx)
 	aw.router.ServeHTTP(w, req)
+}
+
+func (aw *adminWeb) preCheckLogin(req *http.Request) (user *User, isLogin bool) {
+	if req == nil {
+		return nil, false
+	}
+	if u, p, ok := req.BasicAuth(); ok {
+		user = getUser(u)
+		if user != nil && user.PasswordMd5 == p {
+			return user, true
+		}
+		return nil, false
+	}
+	cookie, err := req.Cookie(cookieName)
+	if err != nil {
+		return nil, false
+	}
+	info := strings.SplitN(cookie.Value, ":", 2)
+	if len(info) != 2 {
+		return nil, false
+	}
+	user = getUser(info[0])
+	if user != nil && user.PswEnc() == info[1] {
+		return user, true
+	}
+	return nil, false
 }
 
 var sortChain = xcmp.Chain[*proxyEntry](
@@ -238,31 +263,31 @@ func (aw *adminWeb) handleAddPost(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	str := req.PostFormValue("proxy")
-	isApi := str != ""
-	var proxiesTxt string
-	if isApi {
-		proxiesTxt = "proxy=" + str
-	} else {
-		proxiesTxt = req.PostFormValue("proxies")
-	}
-
-	proxies := parserProxiesFromTxt(proxiesTxt)
+	proxies := parserProxiesFromTxt(str)
 	if proxies.Total() == 0 {
-		wc.addLogMsg("no proxy, form input:[", proxiesTxt, "]")
+		wc.addLogMsg("no proxy, form input:[", str, "]")
 		_, _ = w.Write([]byte("<script>alert('no proxy');</script>"))
 		return
 	}
-	n := 0
+	var added []*proxyEntry
 	proxies.Range(func(proxyURL string, p *proxyEntry) bool {
 		if pool.all.Add(p) {
-			n++
 			pool.dyn.Add(p)
+			added = append(added, p)
 		}
 		return true
 	})
 
-	_, _ = fmt.Fprintf(w, "<script>alert('add %d new proxy');</script>", n)
-	wc.addLogMsg("add new proxy total:", n)
+	if len(added) > 0 {
+		go safely.Run(func() {
+			for _, p := range added {
+				pool.checkerJobs <- p
+			}
+		})
+	}
+
+	_, _ = fmt.Fprintf(w, "<script>alert('add %d new proxy');</script>", len(added))
+	wc.addLogMsg("add new proxy total:", len(added))
 }
 
 func (aw *adminWeb) handleAbout(w http.ResponseWriter, req *http.Request) {
@@ -357,7 +382,7 @@ func (aw *adminWeb) handleTestPost(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 	} else {
-		pe, err := pool.getOneProxyActive(req.Context(), "test")
+		pe, err := pool.getOneProxyActive(req.Context(), "")
 		if err != nil {
 			w.Write([]byte("getOneProxyActive failed:" + err.Error()))
 			return
@@ -399,10 +424,11 @@ func (aw *adminWeb) handleLoginPost(w http.ResponseWriter, req *http.Request) {
 	if user != nil && user.pswEq(psw) {
 		wc.addLogMsg("login suc,name=", name)
 		cookie := &http.Cookie{
-			Name:    cookieName,
-			Value:   fmt.Sprintf("%s:%s", name, user.PswEnc()),
-			Path:    "/",
-			Expires: time.Now().Add(86400 * time.Second),
+			Name:     cookieName,
+			Value:    fmt.Sprintf("%s:%s", name, user.PswEnc()),
+			Path:     "/",
+			Expires:  time.Now().Add(86400 * time.Second),
+			HttpOnly: true,
 		}
 		http.SetCookie(w, cookie)
 		_, _ = w.Write([]byte("<script>parent.location.href='/'</script>"))
@@ -410,44 +436,6 @@ func (aw *adminWeb) handleLoginPost(w http.ResponseWriter, req *http.Request) {
 		wc.addLogMsg("login failed,name=", name, "psw=", psw)
 		_, _ = w.Write([]byte("<script>alert('login failed')</script>"))
 	}
-}
-
-func (aw *adminWeb) handleCheckLogin(req *http.Request, ctx *webCtx) (user *User, isLogin bool) {
-	if req == nil {
-		return nil, false
-	}
-	if u, p, ok := req.BasicAuth(); ok {
-		user = getUser(u)
-		if user != nil && user.Password == p {
-			return user, true
-		}
-		return nil, false
-	}
-
-	if req.Method == "POST" {
-		if pswMd5 := req.PostFormValue("psw_md5"); pswMd5 != "" {
-			userName := req.PostFormValue("user_name")
-			user = getUser(userName)
-			if user != nil && user.PasswordMd5 == pswMd5 {
-				return user, true
-			}
-			ctx.addLogMsg("check login with psw_md5 failed, user_name=[", userName, "],psw_md5=[", pswMd5, "]")
-			return nil, false
-		}
-	}
-	cookie, err := req.Cookie(cookieName)
-	if err != nil {
-		return nil, false
-	}
-	info := strings.SplitN(cookie.Value, ":", 2)
-	if len(info) != 2 {
-		return nil, false
-	}
-	user = getUser(info[0])
-	if user != nil && user.PswEnc() == info[1] {
-		return user, true
-	}
-	return nil, false
 }
 
 func (aw *adminWeb) handleDirect(w http.ResponseWriter, req *http.Request) {
@@ -476,7 +464,7 @@ func (aw *adminWeb) handleFetch(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	method := xurl.StringDef(qs, "method", http.MethodGet)
+	method := xurl.StringDef(qs, "method", req.Method)
 	request, err := http.NewRequestWithContext(req.Context(), strings.ToUpper(method), queryURL, nil)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -489,6 +477,9 @@ func (aw *adminWeb) handleFetch(w http.ResponseWriter, req *http.Request) {
 	}
 
 	header := qs.Get("header")
+	if header == "" {
+		header = req.Header.Get("X-Man-Header")
+	}
 	if len(header) > 0 {
 		hs := map[string]string{}
 		if err = json.Unmarshal([]byte(header), &hs); err != nil {
@@ -500,12 +491,17 @@ func (aw *adminWeb) handleFetch(w http.ResponseWriter, req *http.Request) {
 			request.Header.Add(k, v)
 		}
 	}
+	filter := qs.Get("filter")
+	if filter == "" {
+		filter = req.Header.Get("X-Man-Filter")
+	}
 	attempt := xurl.IntDef(qs, "retry", getRetryWithRequest(req)) + 1
 	param := forwardParam{
 		Request:  request,
 		Username: wc.userName(),
+		Filter:   filter,
 		Attempt:  max(attempt, 1),
-		Format:   xurl.StringDef(qs, "format", ""),
+		Format:   xurl.StringDef(qs, "format", req.Header.Get("X-Man-Format")),
 	}
 
 	defaultRelay.forwardRequest(req.Context(), w, param)
@@ -523,7 +519,7 @@ func (aw *adminWeb) handlePick(w http.ResponseWriter, req *http.Request) {
 		wc.addLogMsg("auth failed")
 		return
 	}
-	one, err := pool.getOneProxyActive(req.Context(), wc.userName())
+	one, err := pool.getOneProxyActive(req.Context(), req.URL.Query().Get("filter"))
 	if err != nil {
 		data := map[string]any{
 			"Code": 2,

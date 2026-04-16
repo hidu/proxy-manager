@@ -13,6 +13,11 @@ import (
 	"github.com/xanygo/anygo/safely"
 )
 
+func isProxyHeader(key string) bool {
+	key = strings.ToLower(key)
+	return key == "authorization" || strings.HasPrefix(key, "x-man-") || strings.HasPrefix(key, "proxy-")
+}
+
 func getHostPortFromReq(req *http.Request) (host string, port int, err error) {
 	var urlStr string
 	if req.URL.Scheme != "" {
@@ -32,10 +37,8 @@ func getHostPortFromURL(urlStr string) (host string, port int, err error) {
 	if err == nil && port == 0 {
 		switch urlObj.Scheme {
 		case "http":
-		case "ws":
 			port = 80
 		case "https":
-		case "wss":
 			port = 443
 		default:
 		}

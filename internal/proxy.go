@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/fs"
 	"log"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"net/url"
@@ -61,6 +62,7 @@ type proxyBase struct {
 	URL     *url.URL  `yaml:"-" json:"-"`
 	Weight  int       `yaml:"Weight,omitempty"`
 	Created time.Time `yaml:"Created,omitempty"`
+	Tags    []string  `yaml:"Tags,omitempty"` // 标签，可用于筛选
 }
 
 func (b *proxyBase) ToProxy() *proxyEntry {
@@ -81,6 +83,7 @@ type proxyState struct {
 	LastCheckOk     xsync.TimeStamp     // 最后检查正常的时间
 	LastCheckStatus atomic.Int64        // 最后一次检查返回的状态码，值为200 才是正常的
 	LastCheckUsed   xsync.TimeDuration  // 最后检查耗时
+	CheckTimes      atomic.Int64        // 检查次数
 	LastCheckMsg    xsync.Value[string] // 最后检查的消息。
 
 	UsedTotal   atomic.Int64 // 被使用的次数
@@ -230,6 +233,31 @@ func (pl *ProxyList) MergeTo(to *ProxyList) {
 		to.Add(value)
 		return true
 	})
+}
+
+var errorNoProxy = errors.New("no active proxy")
+
+// FilterOne 筛选过滤出一个满足条件的,
+//
+//	filter 格式：tag1 & tag2,tag3,[ANY]   -> 三个条件，同时有 tag1 和 tag2 或者 有tag 3，或者 任意返回一个
+//	按照顺序依次返回
+func (pl *ProxyList) FilterOne(filter string) (*proxyEntry, error) {
+	allProxy := pl.all.Load()
+	if len(allProxy) == 0 {
+		return nil, errorNoProxy
+	}
+	fn, err := xslice.BuildTagFilter(filter, func(t *proxyEntry) []string {
+		return t.Base.Tags
+	}, 0)
+	if err != nil {
+		return nil, err
+	}
+	result := fn(allProxy)
+	if len(result) == 0 {
+		return nil, errorNoProxy
+	}
+	n := rand.IntN(len(result))
+	return result[n], nil
 }
 
 func (pl *ProxyList) Next() *proxyEntry {

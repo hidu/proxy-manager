@@ -2,7 +2,6 @@ package internal
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -102,22 +101,17 @@ func (p *ProxyPool) parserConfigFile(confName string) (*ProxyList, error) {
 	return newProxyList(items), nil
 }
 
-var errorNoProxy = errors.New("no active proxy")
-
 var ctxKeyUseProxy = xctx.NewKey()
 
 func contextWithProxyEntry(ctx context.Context, p *proxyEntry) context.Context {
 	return context.WithValue(ctx, ctxKeyUseProxy, p)
 }
 
-func (p *ProxyPool) getOneProxyActive(ctx context.Context, uname string) (*proxyEntry, error) {
+func (p *ProxyPool) getOneProxyActive(ctx context.Context, filter string) (*proxyEntry, error) {
 	if val, ok := ctx.Value(ctxKeyUseProxy).(*proxyEntry); ok {
 		return val, nil
 	}
-	if one := p.active.Next(); one != nil {
-		return one, nil
-	}
-	return nil, errorNoProxy
+	return p.active.FilterOne(filter)
 }
 
 var producerRunning atomic.Bool
@@ -214,6 +208,7 @@ func (p *ProxyPool) checkProxyEntry(proxy *proxyEntry) bool {
 		cost := time.Since(start)
 		proxy.State.LastCheckUsed.Store(cost)
 		proxy.State.LastCheck.Store(start)
+		proxy.State.CheckTimes.Add(1)
 	}
 	if err != nil {
 		proxy.State.LastCheckStatus.Store(int64(255))

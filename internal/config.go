@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xanygo/anygo/ds/xslice"
 	"github.com/xanygo/anygo/xattr"
 )
 
@@ -62,12 +63,13 @@ func parserProxiesFromTxt(txt string) *ProxyList {
 	defaultValues := make(map[string]string)
 	defaultValues["proxy"] = "required"
 	defaultValues["weight"] = "1"
+	defaultValues["tags"] = ""
 	lines := strings.Split(txt, "\n")
 
 	pl := newProxyList(nil)
 	for _, line := range lines {
-		if b, _, ok := strings.Cut(line, "#"); ok {
-			line = b
+		if before, _, ok := strings.Cut(line, "#"); ok {
+			line = before
 		}
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -112,6 +114,17 @@ func parseProxyLine(info map[string]string) *proxyEntry {
 		}
 	}
 	p.Base.Weight = int(intValues["weight"])
+
+	if tags, ok := info["tags"]; ok && tags != "" {
+		for _, tag := range strings.Split(tags, ",") {
+			tag = strings.TrimSpace(tag)
+			if tag != "" {
+				p.Base.Tags = append(p.Base.Tags, tag)
+			}
+		}
+		p.Base.Tags = xslice.Unique(p.Base.Tags)
+	}
+
 	return p
 }
 

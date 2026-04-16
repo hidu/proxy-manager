@@ -57,27 +57,16 @@ func (hc *reply) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	cleanProxyHeader(req.Header)
 	if req.Body != nil {
 		defer req.Body.Close()
 	}
 
 	if req.Method == http.MethodConnect {
-		hc.handleConnect(w, req, user)
+		hc.handleConnect(w, req)
 		return
 	}
 
 	hc.handleHTTP(w, req, user)
-}
-
-func cleanProxyHeader(hd http.Header) {
-	hd.Del("Connection")
-	for k := range hd {
-		kl := strings.ToLower(k)
-		if strings.HasPrefix(kl, "x-man-") || strings.HasPrefix(kl, "proxy-") {
-			hd.Del(k)
-		}
-	}
 }
 
 // handleHTTP  处理代理的 http 请求(非 https)
@@ -112,8 +101,10 @@ func (hc *reply) handleHTTP(w http.ResponseWriter, req *http.Request, user *User
 		return io.NopCloser(bytes.NewReader(body)), nil
 	}
 
-	// 在 handleHTTP 之前，已经清理了
 	for k, v := range req.Header {
+		if isProxyHeader(k) {
+			continue
+		}
 		for _, vv := range v {
 			rr.Header.Add(k, vv)
 		}
@@ -131,6 +122,8 @@ type forwardParam struct {
 	Request  *http.Request
 	Username string
 
+	Filter string
+
 	Attempt int // 总尝试次数，retry+1
 
 	// 输出格式：默认为空，即原样输出
@@ -146,7 +139,7 @@ func (hc *reply) forwardRequest(ctx context.Context, w http.ResponseWriter, para
 	var i int
 	for i = 0; i < param.Attempt; i++ {
 		hc.usedTotal.Add(1)
-		p, err = pool.getOneProxyActive(ctx, param.Username)
+		p, err = pool.getOneProxyActive(ctx, param.Filter)
 		if err != nil {
 			xlog.Warn(ctx, "getOneProxyActive failed", xlog.ErrorAttr("Error", err))
 			continue
@@ -204,7 +197,7 @@ func (hc *reply) getClientConn(w http.ResponseWriter) (net.Conn, error) {
 }
 
 // handleConnect 处理 CONNECT 请求
-func (hc *reply) handleConnect(w http.ResponseWriter, req *http.Request, user *User) {
+func (hc *reply) handleConnect(w http.ResponseWriter, req *http.Request) {
 	if _, _, err := net.SplitHostPort(req.RequestURI); err != nil {
 		xlog.AddAttr(req.Context(), xlog.ErrorAttr("Error", err), xlog.String("Action", "handleConnect"))
 		w.WriteHeader(http.StatusBadGateway)
@@ -220,8 +213,9 @@ func (hc *reply) handleConnect(w http.ResponseWriter, req *http.Request, user *U
 	}
 	defer conn.Close()
 
+	filter := req.Header.Get("X-Man-Filter")
 	// CONNECT 请求的 RequestURI 就是目标地址 如 example.com:443
-	one, sConn, err := hc.getProxyServerConn(req.Context(), user.Name, getRetryWithRequest(req)+1, req.RequestURI)
+	one, sConn, err := hc.getProxyServerConn(req.Context(), filter, getRetryWithRequest(req)+1, req.RequestURI)
 	if err != nil {
 		xlog.AddAttr(req.Context(), xlog.ErrorAttr("Error", err), xlog.String("Action", "getProxyServerConn"))
 		w.WriteHeader(http.StatusBadGateway)
@@ -266,14 +260,14 @@ func (hc *reply) handleConnect(w http.ResponseWriter, req *http.Request, user *U
 	one.State.UsedSuccess.Add(1)
 }
 
-func (hc *reply) getProxyServerConn(ctx context.Context, username string, attempt int, targetAddr string) (*proxyEntry, net.Conn, error) {
+func (hc *reply) getProxyServerConn(ctx context.Context, filter string, attempt int, targetAddr string) (*proxyEntry, net.Conn, error) {
 	for i := 0; i < attempt; i++ {
 		select {
 		case <-ctx.Done():
 			return nil, nil, context.Cause(ctx)
 		default:
 		}
-		one, err := pool.getOneProxyActive(ctx, username)
+		one, err := pool.getOneProxyActive(ctx, filter)
 		if err != nil {
 			continue
 		}
